@@ -1,0 +1,6 @@
+# Pins the Node version for this repository.
+# This is development tooling only. Nothing here runs Node at deploy time or on
+# Kosmos: the deployed artifacts are compose.yaml and .env, and Docker Compose
+# reads them directly.
+[tools]
+node = "26"

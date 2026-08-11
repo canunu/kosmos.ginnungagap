@@ -1,0 +1,8 @@
+# Conventional commits. See commitlint.config.mjs for the allowed scopes.
+#
+# --strict because commitlint exits 0 on warnings by default, and a check that
+# does not block is a check that accumulates. @commitlint/config-conventional
+# ships several rules at warning level of its own, so raising the levels in
+# commitlint.config.mjs would only cover the ones written there; this covers all
+# of them, including any a future version of that preset adds.
+npx --no -- commitlint --edit "$1" --strict

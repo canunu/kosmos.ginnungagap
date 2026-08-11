@@ -1,0 +1,11 @@
+node_modules/
+package-lock.json
+
+# Build output.
+dist/
+
+# The compose source. Its comment blocks and the alignment around them are
+# deliberate, and prettier's YAML formatting would reflow them. Compose itself
+# is the authority on whether this file is valid, and the test suite checks that
+# on every commit, so nothing is lost by leaving formatting to hand.
+compose.yaml

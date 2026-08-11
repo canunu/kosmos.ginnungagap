@@ -1,0 +1,45 @@
+{
+  "name": "ginnungagap",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kosmos Compose project: what runs directly in Docker Desktop on the host",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "comments": {
+    "noDependencies": "There are no runtime dependencies and there never should be. Nothing here is built or shipped: compose.yaml is hand authored and is read directly by Docker Compose. Node is present only as this repository's tooling language, which is the same role it plays in kosmos.yggdrasil, a repository that also ships no JavaScript.",
+    "testRunner": "The tests use node:test rather than a framework, so the suites run with nothing installed. Only the hooks, commitlint and prettier need node_modules.",
+    "deploy": "predeploy runs automatically before deploy, so a compose file that fails its own invariant tests cannot reach Kosmos. That gate is the reason this is an npm script rather than a shell script.",
+    "build": "The transform is `docker compose config`, not a templating library. Compose already interpolates, validates and emits canonical YAML, so there is no substitution code to get wrong. The cost is that the artifact has no comments, which is accepted: the artifact is not where the reasoning is read."
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "prettier": "^3.9.6"
+  },
+  "scripts": {
+    "build": "node scripts/build-compose.mjs",
+    "clean": "rm -rf dist",
+    "lint": "npm run lint:shell && npm run lint:format",
+    "lint:shell": "node scripts/lint-shell.mjs",
+    "lint:format": "prettier --check .",
+    "format": "prettier --write .",
+    "test": "node --test \"tests/unit/**/*.test.js\"",
+    "test:docker": "node --test --test-concurrency=1 --test-timeout=300000 \"tests/docker/**/*.test.js\"",
+    "predeploy": "npm run lint && npm test && npm run build",
+    "deploy": "scp dist/compose.yaml typhon@canunu.me:ginnungagap/compose.yaml",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{json,md,mjs,yaml,yml}": [
+      "prettier --write"
+    ],
+    ".husky/*": [
+      "node scripts/lint-shell.mjs"
+    ]
+  }
+}

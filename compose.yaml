@@ -1,6 +1,13 @@
 # ginnungagap - the Compose project that holds what runs directly in Docker
 # Desktop on Kosmos.
 #
+# This is the source, not the artifact. `npm run build` resolves it against
+# config/deployment.json and writes dist/compose.yaml, and that is what is
+# deployed. It remains a valid compose file, so it can be run directly here
+# during development with the variables supplied in the environment.
+#
+# On Kosmos:
+#
 #   docker compose up -d      bring the project up
 #   docker compose down       tear it down
 #   docker compose ps         what is running
@@ -32,10 +39,11 @@ services:
     # the image was built from, so a rollback is a one line change to .env and it
     # is always possible to tell which build is actually running.
     #
-    # The `:?` form fails the command with this message rather than starting
-    # something unintended when the variable is unset or empty, which is the
-    # state the repository is in before the first bootstrap.
-    image: ${YGGDRASIL_IMAGE:?set YGGDRASIL_IMAGE in .env, e.g. draupnir.hades.kosmos.internal/yggdrasil:<git-sha>}
+    # The `:?` form fails the build with this message rather than producing an
+    # artifact that starts something unintended. Because the value is resolved at
+    # build time on a development machine, an unset image is caught there instead
+    # of becoming a container that will not start after a reboot.
+    image: ${YGGDRASIL_IMAGE:?set yggdrasil.image in config/deployment.json, e.g. draupnir.hades.kosmos.internal/yggdrasil:<git-sha>}
 
     # `missing` rather than `always`, and this is what makes first bootstrap need
     # no special handling.
@@ -175,14 +183,15 @@ services:
         max-file: "3"
 
     environment:
-      # Retention for the dated access logs, applied by the entrypoint at
-      # startup. Restated here at the image default so that changing it is an edit
-      # to this file rather than a rebuild.
+      # Retention for the dated access logs, applied by the entrypoint at startup.
+      # Configured rather than hardcoded because it is a policy knob: changing it
+      # should be an edit to config/deployment.json and a redeploy, not a rebuild
+      # of the image.
       #
-      # YGGDRASIL_LOG_DIR is deliberately not set. It is structural rather than a
-      # policy knob: it has to agree with the mount above, so there is one place
-      # to change it and this is not it.
-      YGGDRASIL_LOG_RETENTION_DAYS: "30"
+      # YGGDRASIL_LOG_DIR is deliberately not configurable. It is structural
+      # rather than policy: it has to agree with the mount above, so there is one
+      # place to change it and this is not it.
+      YGGDRASIL_LOG_RETENTION_DAYS: ${YGGDRASIL_LOG_RETENTION_DAYS:?set yggdrasil.logRetentionDays in config/deployment.json}
 
     networks:
       - ginnungagap

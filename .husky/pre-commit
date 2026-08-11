@@ -1,0 +1,23 @@
+# Lint what is staged, then run the unit suite.
+#
+# The unit tests are here rather than on pre-push because they are fast and need
+# no Docker daemon: `docker compose config` is a client side operation, so the
+# whole suite runs against a stopped Docker Desktop.
+#
+# The docker tests are NOT here. They create containers, which needs the daemon
+# running and is too slow for a commit. Run them with `npm run test:docker`.
+
+# A git hook inherits whatever PATH git was invoked with, which is not
+# necessarily the Node this repository is pinned to. Without this check the
+# failure is a confusing module resolution error from inside the test runner
+# rather than a statement of what is wrong.
+node_major="$(node -v 2>/dev/null | sed -n 's/^v\([0-9][0-9]*\).*/\1/p')"
+if [ -z "$node_major" ] || [ "$node_major" -lt 20 ]; then
+    echo "pre-commit: needs Node 20 or newer, found ${node_major:-none}" >&2
+    echo "pre-commit: the version is pinned in mise.toml; run 'mise use' in this" >&2
+    echo "pre-commit: repository, or commit from a shell where mise is activated" >&2
+    exit 1
+fi
+
+npx lint-staged
+npm test

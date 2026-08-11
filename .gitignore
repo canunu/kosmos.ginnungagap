@@ -1,5 +1,7 @@
 .DS_Store
+node_modules/
 
-# .env is deliberately NOT ignored, which is the opposite of the usual default.
-# It holds the pinned image reference and nothing else, and that reference is the
-# deployment record, so it needs version history. Secrets are not kept in it.
+# The built compose file. Deterministic from compose.yaml and
+# config/deployment.json, both of which are tracked, so committing it would add
+# churn without adding information. `npm run build` regenerates it.
+dist/
