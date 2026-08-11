@@ -1,0 +1,5 @@
+.DS_Store
+
+# .env is deliberately NOT ignored, which is the opposite of the usual default.
+# It holds the pinned image reference and nothing else, and that reference is the
+# deployment record, so it needs version history. Secrets are not kept in it.

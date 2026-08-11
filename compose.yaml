@@ -1,0 +1,201 @@
+# ginnungagap - the Compose project that holds what runs directly in Docker
+# Desktop on Kosmos.
+#
+#   docker compose up -d      bring the project up
+#   docker compose down       tear it down
+#   docker compose ps         what is running
+#
+# In the myth Ginnungagap is the void that precedes the realms and the space the
+# world is afterwards made in, and Yggdrasil's second root stands where it once
+# was. Realm names are reserved for Kubernetes namespaces, so the grouping below
+# the cluster takes the name of the thing that precedes them. See "The grouping
+# below the realms" in kosmos.bootstrap/docs/Conventions.md.
+#
+# There is no `version:` key. It has been ignored since Compose v2 and warns if
+# present.
+
+# Set explicitly rather than inferred from the directory name, so container and
+# network names do not change if the deployed directory is ever moved or renamed.
+# Compose prefixes everything it creates with this, which is why the running
+# container is `ginnungagap-yggdrasil-1`.
+name: ginnungagap
+
+services:
+  # yggdrasil - the application edge. Terminates public TLS for canunu.me,
+  # serves the site, and maps external Greek names onto internal Norse ones.
+  #
+  # The image is built and documented in kosmos.yggdrasil. This file is only
+  # concerned with how it is run: what is mounted into it, what is published out
+  # of it, and what it is allowed to do.
+  yggdrasil:
+    # Pinned to an immutable tag in .env, never `latest`. The tag is the git SHA
+    # the image was built from, so a rollback is a one line change to .env and it
+    # is always possible to tell which build is actually running.
+    #
+    # The `:?` form fails the command with this message rather than starting
+    # something unintended when the variable is unset or empty, which is the
+    # state the repository is in before the first bootstrap.
+    image: ${YGGDRASIL_IMAGE:?set YGGDRASIL_IMAGE in .env, e.g. draupnir.hades.kosmos.internal/yggdrasil:<git-sha>}
+
+    # `missing` rather than `always`, and this is what makes first bootstrap need
+    # no special handling.
+    #
+    # The first image is built on Kosmos by hand and pushed to draupnir, so it is
+    # already in the local image store and this resolves without contacting the
+    # registry at all. Later, when brokk builds it in the cluster instead, the
+    # same setting pulls it because it is genuinely absent. One file, both cases,
+    # no first-run branch. See "The first push" in
+    # kosmos.bootstrap/docs/kubernetes/applications/01_DockerRegistrySetup.md.
+    #
+    # Safe because tags are immutable: a tag already present locally is by
+    # definition the same image the registry holds under that tag.
+    pull_policy: missing
+
+    # `unless-stopped` rather than `always`, so a deliberate `docker compose stop`
+    # stays stopped while a Docker Desktop restart or a host reboot brings the
+    # edge back without waiting for atlas to run.
+    restart: unless-stopped
+
+    # container_name is deliberately unset. Letting Compose name it
+    # `ginnungagap-yggdrasil-1` keeps the project prefix visible in `docker ps`,
+    # which is the point of the grouping having a name at all.
+
+    ports:
+      # Loopback only. This is a requirement rather than a preference: the
+      # listener trusts the PROXY protocol header from any source, which is only
+      # safe because nothing outside the host can open the connection.
+      # Publishing this on 0.0.0.0 would turn that trust into a client address
+      # spoofing vulnerability.
+      #
+      # The container side is 8443 rather than 443 because the image runs as an
+      # unprivileged user, which cannot bind below 1024. The host side is 8443
+      # because that is what hermes is configured to reach. See "Contract for the
+      # application edge" in kosmos.bootstrap/docs/bare_metal/01_KosmosSetup.md.
+      #
+      # Port 8081 is the container-local status listener and is never published.
+      # It is bound to the container's own loopback inside the image, so there is
+      # nothing to publish even by accident.
+      - "127.0.0.1:8443:8443"
+
+    volumes:
+      # The public canunu.me certificate and its key, read only.
+      #
+      # Mounted rather than built into the image: a private key in an image is a
+      # private key in the registry and in every layer cache that pulled it, and
+      # rotating one would otherwise mean a rebuild. The certificate must be the
+      # full chain and not the leaf alone. See "The public canunu.me certificate"
+      # in kosmos.bootstrap/docs/bare_metal/03_KosmosCASetup.md.
+      #
+      # Absolute paths rather than ${HOME}. The account model fixes this to
+      # typhon, and an absolute path fails loudly if the project is ever brought
+      # up from the wrong account instead of silently mounting the wrong material.
+      #
+      # These are file mounts, so the files have to exist first. Docker Desktop
+      # creates a directory in place of a missing bind mount source, and nginx
+      # then fails reporting a certificate it cannot read rather than one that is
+      # absent.
+      - /Users/typhon/certs/canunu.me/canunu.me.fullchain.pem:/etc/ssl/yggdrasil/canunu.me.fullchain.pem:ro
+      - /Users/typhon/certs/canunu.me/canunu.me.key:/etc/ssl/yggdrasil/canunu.me.key:ro
+
+      # The Kosmos local authority, read only. Not used to serve anything: it is
+      # what the edge verifies its internal upstreams against, since those are
+      # signed by this authority rather than by a public one.
+      - /Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt:/etc/ssl/kosmos/kosmos-local-ca.crt:ro
+
+      # The log directory, read write, and the only writable bind mount.
+      #
+      # A per-component subdirectory rather than the session log directory itself.
+      # That directory also holds session_state.json, last_startup.json and
+      # last_shutdown.json, which are state rather than logs, and mounting the
+      # whole of it would give an Internet facing process write access to the
+      # session accounting atlas maintains. See "Derived naming patterns" in
+      # kosmos.bootstrap/docs/Conventions.md.
+      #
+      # It must exist and be writable by uid 101 before the container starts. The
+      # entrypoint checks both and exits with an explanation, because a missing or
+      # unwritable log mount is the most likely first run failure.
+      - /Users/typhon/var/logs/kosmos/yggdrasil:/var/log/yggdrasil
+
+      # nginx needs a writable /tmp even with a read only root filesystem: the
+      # image relocates the pid file and all five *_temp_path directories there
+      # precisely so the root filesystem can be read only.
+      #
+      # Declared in long form rather than under the `tmpfs:` key, because the size
+      # matters. That key takes paths only; mount options written there are a
+      # `docker run` feature rather than a Compose one, so they would be silently
+      # ignored.
+      #
+      # The size is a ceiling rather than an allocation, since tmpfs only consumes
+      # what is written. It is set well above what the static site needs so that a
+      # future proxied name with request buffering left on fails on its own merits
+      # rather than by filling the 64 MB default. mode is left alone: Docker's
+      # tmpfs default is already 1777, which is what uid 101 needs in order to
+      # create the temp directories.
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 268435456
+
+    # Nothing writes outside the log mount and /tmp, so the root filesystem is
+    # read only. This is the setting that turns a compromise of nginx from
+    # persistent into transient.
+    read_only: true
+
+    # No capability is required. The listener is above 1024, so not even
+    # NET_BIND_SERVICE is needed, which is the reason the image uses 8443.
+    cap_drop:
+      - ALL
+
+    security_opt:
+      # A setuid binary in the image cannot be used to gain privileges. Combined
+      # with cap_drop and the read only root filesystem, the container has no
+      # route to more than it started with.
+      - no-new-privileges:true
+
+    # SIGQUIT is nginx's graceful shutdown; the SIGTERM Docker would send by
+    # default is its fast shutdown, which drops connections in flight. For a
+    # public edge that difference is visible to clients on every deploy.
+    stop_signal: SIGQUIT
+    stop_grace_period: 30s
+
+    # No healthcheck here. The image defines one against its own status listener,
+    # and restating it would create a second definition to keep in sync.
+
+    logging:
+      # nginx writes both of its streams to files on the log mount, so the
+      # container's stdout carries only the entrypoint's startup banner and
+      # anything that goes wrong before nginx takes over. That is tiny in normal
+      # operation and unbounded in a crash loop, which is what this caps.
+      #
+      # The nginx logs themselves are not covered by this. They rotate and expire
+      # under the scheme described in kosmos.bootstrap/docs/Conventions.md.
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+    environment:
+      # Retention for the dated access logs, applied by the entrypoint at
+      # startup. Restated here at the image default so that changing it is an edit
+      # to this file rather than a rebuild.
+      #
+      # YGGDRASIL_LOG_DIR is deliberately not set. It is structural rather than a
+      # policy knob: it has to agree with the mount above, so there is one place
+      # to change it and this is not it.
+      YGGDRASIL_LOG_RETENTION_DAYS: "30"
+
+    networks:
+      - ginnungagap
+
+networks:
+  # Named explicitly rather than left as Compose's generated
+  # `ginnungagap_default`. With a single network the project and the network are
+  # the same boundary, and a second name would imply they can diverge.
+  #
+  # The edge does not currently need to reach a sibling container: it proxies
+  # outward to the cluster at literal addresses on the VM subnet. The network is
+  # declared anyway so the project's boundary is named rather than incidental. A
+  # project that later needs more than one names the additional ones
+  # descriptively, `ginnungagap-internal` and so on.
+  ginnungagap:
+    name: ginnungagap
