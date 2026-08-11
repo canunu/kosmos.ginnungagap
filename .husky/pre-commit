@@ -1,16 +1,13 @@
-# Lint what is staged, then run the unit suite.
+# Lint and format what is staged.
 #
-# The unit tests are here rather than on pre-push because they are fast and need
-# no Docker daemon: `docker compose config` is a client side operation, so the
-# whole suite runs against a stopped Docker Desktop.
-#
-# The docker tests are NOT here. They create containers, which needs the daemon
-# running and is too slow for a commit. Run them with `npm run test:docker`.
+# No tests here. Both suites run on pre-push instead, so a series of commits costs
+# one test run rather than one each, and a commit stays quick enough that nobody
+# reaches for --no-verify to avoid it.
 
 # A git hook inherits whatever PATH git was invoked with, which is not
 # necessarily the Node this repository is pinned to. Without this check the
-# failure is a confusing module resolution error from inside the test runner
-# rather than a statement of what is wrong.
+# failure is a confusing module resolution error from inside lint-staged rather
+# than a statement of what is wrong.
 node_major="$(node -v 2>/dev/null | sed -n 's/^v\([0-9][0-9]*\).*/\1/p')"
 if [ -z "$node_major" ] || [ "$node_major" -lt 20 ]; then
     echo "pre-commit: needs Node 20 or newer, found ${node_major:-none}" >&2
@@ -20,4 +17,3 @@ if [ -z "$node_major" ] || [ "$node_major" -lt 20 ]; then
 fi
 
 npx lint-staged
-npm test

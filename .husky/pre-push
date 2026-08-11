@@ -1,13 +1,13 @@
-# The full suite, before anything leaves the machine.
+# Both suites, before anything leaves the machine.
 #
-# The unit suite already ran on pre-commit and is repeated here deliberately. A
-# push can carry commits made with --no-verify, rebased in from elsewhere, or
-# created on a machine where the hooks were never installed, so the commit hook
-# is not a guarantee that every commit being pushed was checked. This is the last
-# gate, and the suite costs about a second.
+# Tests run here rather than on pre-commit for two reasons. A series of commits
+# costs one test run instead of one each, and the commit hook stays fast enough
+# not to be worked around.
 #
-# The docker suite runs only here. It needs the daemon and is far too slow for a
-# commit.
+# This is also the only gate that sees every commit being pushed. A push can carry
+# commits made with --no-verify, rebased in from elsewhere, or written on a
+# machine where the hooks were never installed, so nothing earlier is a guarantee
+# about what is actually going out.
 
 # A git hook inherits whatever PATH git was invoked with, which is not
 # necessarily the Node this repository is pinned to. Repeated from pre-commit
@@ -34,10 +34,17 @@ npm test
 if docker info >/dev/null 2>&1; then
     npm run test:docker
 else
+    # Report why rather than assuming. A failed `docker info` covers a stopped
+    # daemon and a socket the current user cannot open, and saying "not running"
+    # for the second sends you to look at Docker Desktop instead of at
+    # permissions.
+    docker_error="$(docker info 2>&1 >/dev/null | tail -1)"
+
     echo "" >&2
-    echo "pre-push: WARNING - the Docker daemon is not running." >&2
+    echo "pre-push: WARNING - cannot reach the Docker daemon." >&2
+    echo "pre-push: ${docker_error}" >&2
     echo "pre-push: the runtime suite did NOT run, so nothing checked that the" >&2
     echo "pre-push: daemon applies what compose.yaml describes." >&2
-    echo "pre-push: start Docker Desktop and run 'npm run test:docker'." >&2
+    echo "pre-push: fix the above and run 'npm run test:docker'." >&2
     echo "" >&2
 fi

@@ -189,7 +189,7 @@ The public certificate rotates independently of all of this. Replacing the two f
 
 ### What is tested, and where
 
-The unit suite runs against `docker compose config`, which is client side, so it works with Docker Desktop stopped and is fast enough for a commit hook. It asserts the project's invariants rather than its style, and most of them exist because something else depends on them.
+The unit suite runs against `docker compose config`, which is client side, so it works with Docker Desktop stopped and takes about a second. It asserts the project's invariants rather than its style, and most of them exist because something else depends on them.
 
 The sharpest is the loopback binding. `kosmos.yggdrasil`'s nginx sets `set_real_ip_from 0.0.0.0/0` and trusts the PROXY protocol header from any source, which is safe only because nothing off-host can open that connection. Publishing on `0.0.0.0` would turn that trust into a client address spoofing vulnerability, silently, from a change in this repository. That test is the only place the two repositories are held together.
 
@@ -200,12 +200,14 @@ It deliberately does not build or exercise the `yggdrasil` image. That is covere
 ### Git hooks
 
 - `commit-msg`: conventional commit validation, scopes in `commitlint.config.mjs`
-- `pre-commit`: lint-staged, then the unit suite
-- `pre-push`: the unit suite again, then the docker suite
+- `pre-commit`: lint-staged
+- `pre-push`: the unit suite, then the docker suite
 
-The unit suite runs in both hooks on purpose. A push can carry commits made with `--no-verify`, rebased in from elsewhere, or written on a machine where the hooks were never installed, so passing the commit hook is not a claim about everything being pushed. It costs about a second.
+Tests run on push rather than on commit. A series of commits then costs one test run instead of one each, and the commit hook stays quick enough that nobody reaches for `--no-verify` to get past it.
 
-The docker suite runs only on push, and **it does not block one when the daemon is down**. That is an environment condition rather than a defect, and failing on it would teach the habit of `--no-verify`, which also switches off the commit message hook — a worse outcome than an unverified runtime suite. It warns loudly instead, because the alternative to a noisy skip is a silent one.
+Push is also the only gate that sees everything going out. A push can carry commits made with `--no-verify`, rebased in from elsewhere, or written on a machine where the hooks were never installed, so nothing earlier is a guarantee about what is actually being pushed.
+
+The docker suite runs only on push, and **it does not block one when the daemon is unreachable**. That is an environment condition rather than a defect, and failing on it would teach the habit of `--no-verify`, which also switches off the commit message hook — a worse outcome than an unverified runtime suite. It warns loudly instead, because the alternative to a noisy skip is a silent one.
 
 ### Nothing else is advisory
 
@@ -217,7 +219,7 @@ Every other check fails rather than warns. A check that does not block is a chec
 | commitlint | `--strict` in the hook, which promotes warnings to failures. Without it, level 1 rules exit 0, and `@commitlint/config-conventional` ships several of its own at that level                   |
 | shellcheck | a missing shellcheck fails the lint rather than skipping it. It is a declared tool here, so its absence is a broken environment, and skipping would mean the hooks quietly stop being checked |
 
-The docker suite above is the single exception, and only because a stopped daemon says nothing about the change being pushed.
+The docker suite above is the single exception, and only because an unreachable daemon says nothing about the change being pushed. It reports why it could not run, since "not running" and "not permitted to connect" send you to look in different places.
 
 ## Verification
 
