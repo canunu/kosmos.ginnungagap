@@ -16,7 +16,7 @@
 # world is afterwards made in, and Yggdrasil's second root stands where it once
 # was. Realm names are reserved for Kubernetes namespaces, so the grouping below
 # the cluster takes the name of the thing that precedes them. See "The grouping
-# below the realms" in kosmos.bootstrap/docs/Conventions.md.
+# below the realms" in kosmos.bootstrap/docs/02_Conventions.md.
 #
 # There is no `version:` key. It has been ignored since Compose v2 and warns if
 # present.
@@ -29,7 +29,8 @@ name: ginnungagap
 
 services:
   # yggdrasil - the application edge. Terminates public TLS for canunu.me,
-  # serves the site, and maps external Greek names onto internal Norse ones.
+  # serves the site, and maps each published name onto the same name in the
+  # internal zone, hades.kosmos.internal.
   #
   # The image is built and documented in kosmos.yggdrasil. This file is only
   # concerned with how it is run: what is mounted into it, what is published out
@@ -43,7 +44,7 @@ services:
     # artifact that starts something unintended. Because the value is resolved at
     # build time on a development machine, an unset image is caught there instead
     # of becoming a container that will not start after a reboot.
-    image: ${YGGDRASIL_IMAGE:?set yggdrasil.image in config/deployment.json, e.g. draupnir.hades.kosmos.internal/yggdrasil:<git-sha>}
+    image: ${YGGDRASIL_IMAGE:?set yggdrasil.image in config/deployment.json, e.g. amalthea.hades.kosmos.internal/yggdrasil:<git-sha>}
 
     # `missing` rather than `always`, and this is what makes first bootstrap need
     # no special handling.
@@ -117,7 +118,7 @@ services:
       # last_shutdown.json, which are state rather than logs, and mounting the
       # whole of it would give an Internet facing process write access to the
       # session accounting atlas maintains. See "Derived naming patterns" in
-      # kosmos.bootstrap/docs/Conventions.md.
+      # kosmos.bootstrap/docs/02_Conventions.md.
       #
       # It must exist and be writable by uid 101 before the container starts. The
       # entrypoint checks both and exits with an explanation, because a missing or
@@ -176,7 +177,7 @@ services:
       # operation and unbounded in a crash loop, which is what this caps.
       #
       # The nginx logs themselves are not covered by this. They rotate and expire
-      # under the scheme described in kosmos.bootstrap/docs/Conventions.md.
+      # under the scheme described in kosmos.bootstrap/docs/02_Conventions.md.
       driver: json-file
       options:
         max-size: 10m

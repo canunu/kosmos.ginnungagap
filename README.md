@@ -4,7 +4,7 @@ The Compose project that holds what runs directly in Docker Desktop on Kosmos.
 
 Today it holds one service, `yggdrasil`, the application edge. It exists as a named grouping rather than a bare `docker run` so that whatever comes next joins something that already has a name, a network, a deploy path and a startup path, instead of acquiring its own.
 
-`ginnungagap` is a Norse name because it groups containers, and deliberately not a realm name, because those are reserved for Kubernetes namespaces. The reasoning is in [Conventions](../kosmos.bootstrap/docs/Conventions.md), and what every other name used here refers to is in [Component Inventory](../kosmos.bootstrap/docs/Inventory.md).
+`ginnungagap` is a Norse name because it groups containers, and deliberately not a realm name, because those are reserved for Kubernetes namespaces. The reasoning is in [Conventions](../kosmos.bootstrap/docs/02_Conventions.md), and what every other name used here refers to is in [Component Inventory](../kosmos.bootstrap/docs/05_Inventory.md).
 
 ## Where it sits
 
@@ -17,12 +17,12 @@ graph TD
         YGG["ginnungagap-yggdrasil-1 - image from kosmos.yggdrasil"]
     end
 
-    INGRESS["ingress-nginx - 192.168.50.100"]
+    GATEWAY["the Istio ingress gateway - 192.168.50.100"]
     DRAUPNIR["draupnir - 192.168.50.101"]
 
     CLIENT -->|"TCP 443"| HERMES
     HERMES -->|"loopback 8443, PROXY protocol v2"| YGG
-    YGG -->|"HTTPS, internal name in Host"| INGRESS
+    YGG -->|"HTTPS, internal name in Host"| GATEWAY
     YGG -->|"HTTPS, own certificate"| DRAUPNIR
     DRAUPNIR -.->|"the image is pulled from here"| YGG
 ```
@@ -73,7 +73,7 @@ Two consequences, both accepted:
 ```json
 {
   "yggdrasil": {
-    "image": "draupnir.hades.kosmos.internal/yggdrasil:<git-sha>",
+    "image": "amalthea.hades.kosmos.internal/yggdrasil:<git-sha>",
     "logRetentionDays": 30
   }
 }
@@ -112,7 +112,7 @@ That is why there is no bootstrap mode, no conditional, and no registry credenti
 
 The in-cluster pull path is unaffected by any of this. `containerd` reaches `draupnir` directly across the private VM subnet, so the cluster keeps pulling images while the edge is down. That is what makes hosting the edge's own image in a registry the edge fronts safe rather than circular.
 
-> **The host reaches `draupnir` by name only because of an `/etc/hosts` entry.** The Docker Desktop daemon does not read the host's `/etc/resolver` files, so it never sees Orpheus and cannot resolve `kosmos.internal` on its own. The entry is made during setup and recorded in the registry document. Without it, `docker pull` fails with `lookup draupnir.hades.kosmos.internal ... no such host`, which names a symptom rather than the cause.
+> **The host reaches `draupnir` by name only because of an `/etc/hosts` entry.** The Docker Desktop daemon does not read the host's `/etc/resolver` files, so it never sees Orpheus and cannot resolve `kosmos.internal` on its own. The entry is made during setup and recorded in the registry document. Without it, `docker pull` fails with `lookup amalthea.hades.kosmos.internal ... no such host`, which names a symptom rather than the cause.
 
 ## Runtime prerequisites
 
@@ -233,7 +233,7 @@ The PROXY protocol flag in step 2 is not optional. Once the listener requires th
 ## Not covered here
 
 - how the image is built, configured or tested: [kosmos.yggdrasil](../kosmos.yggdrasil)
-- what the names mean and why: [Conventions](../kosmos.bootstrap/docs/Conventions.md)
+- what the names mean and why: [Conventions](../kosmos.bootstrap/docs/02_Conventions.md)
 - installing Docker Desktop and Compose, the `/etc/hosts` entry, and the first push: the Kosmos setup documents in [kosmos.bootstrap](../kosmos.bootstrap)
 - bringing this up at login: `atlas`, in [kosmos.bootstrap](../kosmos.bootstrap)
 - the host side of first bootstrap, including the directories this expects: [Ginnungagap Setup](../kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md)

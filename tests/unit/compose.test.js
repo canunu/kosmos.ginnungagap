@@ -177,7 +177,7 @@ describe("mounts", () => {
 
   it("never mounts the session log directory itself", () => {
     // Widening this mount would hand an Internet facing process write access to
-    // the session state atlas maintains. See Conventions.md, derived naming.
+    // the session state atlas maintains. See 02_Conventions.md, derived naming.
     for (const mount of service.volumes) {
       if (mount.type !== "bind") continue;
       assert.notEqual(mount.source, "/Users/typhon/var/logs/kosmos");
