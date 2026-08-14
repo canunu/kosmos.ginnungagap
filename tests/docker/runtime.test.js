@@ -35,6 +35,24 @@ const CERT_TARGETS = [
 ];
 const LOG_TARGET = "/var/log/yggdrasil";
 
+/*
+ * The limits this suite asks for, and what the daemon should record for them.
+ *
+ * Compose canonicalises both, so the expected values are not the values written
+ * in the compose file: `cpus` becomes NanoCpus and `1g` becomes a byte count.
+ * That translation is part of what is being asserted.
+ *
+ * These are the suite's own fixture rather than the values in
+ * config/deployment.json, for the same reason the retention value below is.
+ * The claim under test is that a limit is applied at all, not that production is
+ * currently sized a particular way, and a test that read the deployment would
+ * fail every time someone re-tuned it.
+ */
+const CPU_LIMIT = "2";
+const MEMORY_LIMIT = "1g";
+const EXPECTED_NANO_CPUS = 2_000_000_000;
+const EXPECTED_MEMORY_BYTES = 1_073_741_824;
+
 function compose(args, extraEnv = {}) {
   return spawnSync(
     "docker",
@@ -46,6 +64,8 @@ function compose(args, extraEnv = {}) {
         ...process.env,
         YGGDRASIL_IMAGE: STAND_IN_IMAGE,
         YGGDRASIL_LOG_RETENTION_DAYS: "30",
+        YGGDRASIL_CPU_LIMIT: CPU_LIMIT,
+        YGGDRASIL_MEMORY_LIMIT: MEMORY_LIMIT,
         ...extraEnv
       }
     }
@@ -207,5 +227,22 @@ describe("what the daemon applied", { skip }, () => {
 
   it("is not privileged", () => {
     assert.equal(hostConfig.Privileged, false);
+  });
+
+  /*
+   * These two are the reason this suite is worth having, in miniature.
+   *
+   * `deploy:` was Swarm-only under Compose v1 and is silently ignored there,
+   * which makes a resource limit the textbook case of a setting that Compose
+   * accepts, emits in `config`, and does not apply. Asserting it against the
+   * daemon is the only way to know which of those two worlds the installed
+   * Compose is in.
+   */
+  it("applied the memory limit", () => {
+    assert.equal(hostConfig.Memory, EXPECTED_MEMORY_BYTES);
+  });
+
+  it("applied the CPU limit", () => {
+    assert.equal(hostConfig.NanoCpus, EXPECTED_NANO_CPUS);
   });
 });

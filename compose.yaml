@@ -161,6 +161,37 @@ services:
       # route to more than it started with.
       - no-new-privileges:true
 
+    # Runtime limits, not image properties. A Dockerfile describes an image and
+    # cgroup constraints belong to whoever runs it, so this is the only place
+    # they can be asserted and the only place they are visible in source.
+    #
+    # These are ceilings rather than reservations. Nothing is withheld from the
+    # host by setting them, which is the opposite of how VM memory allocation
+    # behaves, and it is why they are set generously: an over-large limit costs
+    # nothing, and one set too low OOM-kills the public edge.
+    #
+    # memory has to stay well clear of the 256 MiB tmpfs on /tmp above, because
+    # tmpfs pages are charged to this cgroup. A limit near the tmpfs size turns
+    # "something filled /tmp" into "nginx was OOM-killed", and nobody connects
+    # those two facts while the site is down. 1g is a deliberate 4x margin.
+    #
+    # cpus is the relaxed one, since nginx serving a static site and proxying is
+    # not CPU bound. Note that `worker_processes auto` in the image resolves
+    # against the Docker Desktop VM's core count rather than this quota, so
+    # pinning this much lower means pinning worker_processes to match or paying
+    # for workers that only ever contend with each other.
+    #
+    # Declared under `deploy.resources` rather than the older `cpus` and
+    # `mem_limit` shorthands: it is the canonical Compose Spec form, Compose v2
+    # honours it for a local `up` rather than only for a Swarm deploy, and it
+    # survives `docker compose config` unchanged so the build needs no special
+    # handling.
+    deploy:
+      resources:
+        limits:
+          cpus: ${YGGDRASIL_CPU_LIMIT:?set yggdrasil.cpuLimit in config/deployment.json}
+          memory: ${YGGDRASIL_MEMORY_LIMIT:?set yggdrasil.memoryLimit in config/deployment.json}
+
     # SIGQUIT is nginx's graceful shutdown; the SIGTERM Docker would send by
     # default is its fast shutdown, which drops connections in flight. For a
     # public edge that difference is visible to clients on every deploy.

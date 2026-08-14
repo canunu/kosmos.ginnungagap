@@ -1,6 +1,8 @@
 {
   "yggdrasil": {
     "image": "",
-    "logRetentionDays": 30
+    "logRetentionDays": 30,
+    "cpuLimit": "2",
+    "memoryLimit": "1g"
   }
 }

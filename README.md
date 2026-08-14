@@ -74,7 +74,9 @@ Two consequences, both accepted:
 {
   "yggdrasil": {
     "image": "amalthea.hades.kosmos.internal/yggdrasil:<git-sha>",
-    "logRetentionDays": 30
+    "logRetentionDays": 30,
+    "cpuLimit": "2",
+    "memoryLimit": "1g"
   }
 }
 ```
@@ -85,18 +87,19 @@ It is tracked, and that is the point. `git log -p -- config/deployment.json` is 
 
 ## The decisions worth knowing
 
-| Choice                                            | Reason                                                                                                               |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `pull_policy: missing`                            | makes first bootstrap and steady state the same file, with no first-run branch                                       |
-| immutable git SHA tags, never `latest`            | rollback is one line, and it is what makes `pull_policy: missing` safe                                               |
-| configuration tracked, artifact not               | the pinned tag is the deployment record and wants history; the built file is derivable and would only add churn      |
-| published to `127.0.0.1` only                     | the listener trusts a PROXY header from any source, which is only safe if nothing off-host can open the connection   |
-| `read_only`, `cap_drop: ALL`, `no-new-privileges` | nothing writes outside the log mount and `/tmp`, so the container has no route to more than it started with          |
-| `tmpfs` on `/tmp`, in long form                   | the image relocates the pid file and all five temp paths there so the root can be read only, and the size matters    |
-| `stop_signal: SIGQUIT`                            | nginx's graceful shutdown. The default `SIGTERM` is its fast one and drops connections mid-deploy, which clients see |
-| network named `ginnungagap`                       | with one network, the project and the network are the same boundary                                                  |
-| `restart: unless-stopped`                         | a Docker Desktop restart or a reboot recovers the edge without waiting for `atlas`                                   |
-| certificates mounted, never copied in             | a private key in an image is a private key in the registry and in every layer cache that pulled it                   |
+| Choice                                            | Reason                                                                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `pull_policy: missing`                            | makes first bootstrap and steady state the same file, with no first-run branch                                        |
+| immutable git SHA tags, never `latest`            | rollback is one line, and it is what makes `pull_policy: missing` safe                                                |
+| configuration tracked, artifact not               | the pinned tag is the deployment record and wants history; the built file is derivable and would only add churn       |
+| published to `127.0.0.1` only                     | the listener trusts a PROXY header from any source, which is only safe if nothing off-host can open the connection    |
+| `read_only`, `cap_drop: ALL`, `no-new-privileges` | nothing writes outside the log mount and `/tmp`, so the container has no route to more than it started with           |
+| `tmpfs` on `/tmp`, in long form                   | the image relocates the pid file and all five temp paths there so the root can be read only, and the size matters     |
+| `stop_signal: SIGQUIT`                            | nginx's graceful shutdown. The default `SIGTERM` is its fast one and drops connections mid-deploy, which clients see  |
+| network named `ginnungagap`                       | with one network, the project and the network are the same boundary                                                   |
+| `restart: unless-stopped`                         | a Docker Desktop restart or a reboot recovers the edge without waiting for `atlas`                                    |
+| certificates mounted, never copied in             | a private key in an image is a private key in the registry and in every layer cache that pulled it                    |
+| runtime limits in Compose, not the Dockerfile     | a Dockerfile builds an image; cgroup limits belong to whoever runs it, so this is the only place they can be asserted |
 
 ## Bootstrapping yggdrasil
 
