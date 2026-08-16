@@ -44,13 +44,13 @@ services:
     # that starts something unintended, and because the value is resolved on a
     # development machine, an unset image is caught there rather than becoming a
     # container that will not start after a reboot.
-    image: ${YGGDRASIL_IMAGE:?set yggdrasil.image in config/deployment.json, e.g. amalthea.hades.kosmos.internal/yggdrasil:<git-sha>}
+    image: ${YGGDRASIL_IMAGE:?set yggdrasil.image in config/deployment.json, e.g. amalthea.hades.kosmos.internal:5000/yggdrasil:<git-sha>}
 
     # `missing` is what makes first bootstrap need no special handling: the first
     # image is built on Kosmos and is already local, and later, once brokk builds
     # it instead, the same setting pulls it. Safe because tags are immutable. See
     # "Bootstrapping" in
-    # kosmos.bootstrap/docs/bare_metal/04_GinnungagapSetup.md.
+    # kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md.
     pull_policy: missing
 
     # A decision about who may start this container rather than about how it
@@ -58,7 +58,7 @@ services:
     # `unless-stopped` would let the daemon start it at every login having
     # checked nothing. Unbounded rather than `on-failure:3`, because a bounded
     # count leaves the edge down until the next login. See "atlas is the only
-    # start authority" in kosmos.bootstrap/docs/bare_metal/06_KosmosStartup.md.
+    # start authority" in kosmos.bootstrap/docs/bare_metal/07_KosmosStartup.md.
     restart: on-failure
 
     # container_name is deliberately unset, so Compose names it

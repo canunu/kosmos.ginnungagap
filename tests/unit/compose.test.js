@@ -240,7 +240,7 @@ describe("deployment discipline", () => {
     // network having been through neither check. Asserted across every service
     // rather than yggdrasil alone, so a service added later inherits the rule
     // instead of escaping it. See "What atlas is responsible for starting" in
-    // kosmos.bootstrap/docs/bare_metal/06_KosmosStartup.md.
+    // kosmos.bootstrap/docs/bare_metal/07_KosmosStartup.md.
     for (const [name, declared] of Object.entries(project.services)) {
       const policy = declared.restart;
       assert.ok(policy, `${name} declares no restart policy`);

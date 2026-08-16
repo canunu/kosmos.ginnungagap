@@ -34,18 +34,18 @@ The dotted edge is the only surprising one: the edge's own image comes from a re
 
 ## Responsibilities
 
-| Does                                                      | Does not                                                                                    |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| declare how `yggdrasil` is run: mounts, port, privileges  | build the image or hold its configuration, which is [kosmos.yggdrasil](../kosmos.yggdrasil) |
-| pin the exact image versions deployed, with history       | decide what the images contain                                                              |
-| name the project, its network and the store it references | appear in any DNS name, because it names a grouping                                         |
-| build a resolved compose file and copy it to Kosmos       | bring itself up at login, which `atlas` does                                                |
-| hold the only writable mount the edge has                 | run the registry, which has a project of its own in [kosmos.draupnir](../kosmos.draupnir)   |
+| Does                                                     | Does not                                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| declare how `yggdrasil` is run: mounts, port, privileges | build the image or hold its configuration, which is [kosmos.yggdrasil](../kosmos.yggdrasil) |
+| pin the exact image versions deployed, with history      | decide what the images contain                                                              |
+| name the project and its network                         | appear in any DNS name, because it names a grouping                                         |
+| build a resolved compose file and copy it to Kosmos      | bring itself up at login, which `atlas` does                                                |
+| hold the only writable mount the edge has                | run the registry, which has a project of its own in [kosmos.draupnir](../kosmos.draupnir)   |
 
 ## Layout
 
 ```
-compose.yaml              the source: two services, one network, one external volume
+compose.yaml              the source: one service, one network
 config/deployment.json    what varies, and the deployment record
 dist/compose.yaml         the built artifact, untracked, what Kosmos runs
 scripts/build-compose.mjs the build
@@ -76,7 +76,7 @@ Two consequences, both accepted:
 ```json
 {
   "yggdrasil": {
-    "image": "amalthea.hades.kosmos.internal/yggdrasil:<git-sha>",
+    "image": "amalthea.hades.kosmos.internal:5000/yggdrasil:<git-sha>",
     "logRetentionDays": 30,
     "cpuLimit": "2",
     "memoryLimit": "1g"
@@ -92,24 +92,23 @@ It is tracked, and that is the point. `git log -p -- config/deployment.json` is 
 
 An index, not the arguments. Each line says what was chosen and enough to recognise why; the reasoning lives once, either in the comment beside the setting in `compose.yaml` or in the platform documentation those comments point at. If you find the same argument in two of those places, one of them is wrong and it is probably this one.
 
-| Choice                             | Reason                                                                         |
-| ---------------------------------- | ------------------------------------------------------------------------------ |
-| `pull_policy: missing` on the edge | makes first bootstrap and steady state the same file, with no first-run branch |
-
-| immutable git SHA tags, never `latest` | rollback is one line, and it is what makes `pull_policy: missing` safe |
-| configuration tracked, artifact not | the pinned tag is the deployment record and wants history; the built file is derivable and would only add churn |
-| published to `127.0.0.1` only | the listener trusts a PROXY header from any source, which is only safe if nothing off-host can open the connection |
-| `read_only`, `cap_drop: ALL`, `no-new-privileges` | nothing writes outside the log mount and `/tmp`, so the container has no route to more than it started with |
-| `tmpfs` on `/tmp`, in long form | the image relocates the pid file and all five temp paths there so the root can be read only, and the size matters |
-| `stop_signal: SIGQUIT` | nginx's graceful shutdown. The default `SIGTERM` is its fast one and drops connections mid-deploy, which clients see |
-| network named `ginnungagap` | with one network, the project and the network are the same boundary |
-| `restart: on-failure` | `atlas` is the sole start authority; a daemon-initiated start would bypass its resource and readiness checks |
-| certificates mounted, never copied in | a private key in an image is a private key in the registry and in every layer cache that pulled it |
-| runtime limits in Compose, not the Dockerfile | a Dockerfile builds an image; cgroup limits belong to whoever runs it, so this is the only place they can be asserted |
+| Choice                                            | Reason                                                                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `pull_policy: missing` on the edge                | makes first bootstrap and steady state the same file, with no first-run branch                                        |
+| immutable git SHA tags, never `latest`            | rollback is one line, and it is what makes `pull_policy: missing` safe                                                |
+| configuration tracked, artifact not               | the pinned tag is the deployment record and wants history; the built file is derivable and would only add churn       |
+| published to `127.0.0.1` only                     | the listener trusts a PROXY header from any source, which is only safe if nothing off-host can open the connection    |
+| `read_only`, `cap_drop: ALL`, `no-new-privileges` | nothing writes outside the log mount and `/tmp`, so the container has no route to more than it started with           |
+| `tmpfs` on `/tmp`, in long form                   | the image relocates the pid file and all five temp paths there so the root can be read only, and the size matters     |
+| `stop_signal: SIGQUIT`                            | nginx's graceful shutdown. The default `SIGTERM` is its fast one and drops connections mid-deploy, which clients see  |
+| network named `ginnungagap`                       | with one network, the project and the network are the same boundary                                                   |
+| `restart: on-failure`                             | `atlas` is the sole start authority; a daemon-initiated start would bypass its resource and readiness checks          |
+| certificates mounted, never copied in             | a private key in an image is a private key in the registry and in every layer cache that pulled it                    |
+| runtime limits in Compose, not the Dockerfile     | a Dockerfile builds an image; cgroup limits belong to whoever runs it, so this is the only place they can be asserted |
 
 ## Bootstrapping
 
-The edge's image comes from a registry on the same host, which looks circular and is not. The sequence that resolves it — build the first image on Kosmos, push it, let the local store carry the first run — is a host procedure and lives in [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/04_GinnungagapSetup.md#bootstrapping-the-first-image).
+The edge's image comes from a registry on the same host, which looks circular and is not. The sequence that resolves it — build the first image on Kosmos, push it, let the local store carry the first run — is a host procedure and lives in [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md#bootstrapping-the-first-image).
 
 What this repository contributes is one setting: **`pull_policy: missing`**, which resolves locally on the first run and pulls once `brokk` is building instead. One file, both cases, no first-run branch.
 
