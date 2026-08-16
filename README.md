@@ -2,7 +2,7 @@
 
 The Compose project that holds what runs directly in Docker Desktop on Kosmos.
 
-Today it holds one service, `yggdrasil`, the application edge. It exists as a named grouping rather than a bare `docker run` so that whatever comes next joins something that already has a name, a network, a deploy path and a startup path, instead of acquiring its own.
+It holds two services: `draupnir`, the container registry, and `yggdrasil`, the application edge. It exists as a named grouping rather than a pair of `docker run` lines so that whatever comes next joins something that already has a name, a network, a deploy path and a startup path, instead of acquiring its own.
 
 `ginnungagap` is a Norse name because it groups containers, and deliberately not a realm name, because those are reserved for Kubernetes namespaces. The reasoning is in [Conventions](../kosmos.bootstrap/docs/02_Conventions.md), and what every other name used here refers to is in [Component Inventory](../kosmos.bootstrap/docs/05_Inventory.md).
 
@@ -13,36 +13,41 @@ graph TD
     CLIENT["LAN and WAN clients"]
     HERMES["hermes - HAProxy on the host, 80 and 443"]
 
+    NODES["cluster nodes - containerd"]
+
     subgraph GAP["ginnungagap - this repository"]
+        DRAUPNIR["ginnungagap-draupnir-1 - image from kosmos.draupnir"]
         YGG["ginnungagap-yggdrasil-1 - image from kosmos.yggdrasil"]
     end
 
     GATEWAY["the Istio ingress gateway - 192.168.50.100"]
-    DRAUPNIR["draupnir - 192.168.50.101"]
+    NAS[("the registry's store, on the NAS")]
 
     CLIENT -->|"TCP 443"| HERMES
+    NODES -->|"TCP 443 at the vmnet gateway"| HERMES
     HERMES -->|"loopback 8443, PROXY protocol v2"| YGG
+    HERMES -->|"loopback 5000, routed by SNI"| DRAUPNIR
     YGG -->|"HTTPS, internal name in Host"| GATEWAY
-    YGG -->|"HTTPS, own certificate"| DRAUPNIR
-    DRAUPNIR -.->|"the image is pulled from here"| YGG
+    DRAUPNIR --> NAS
+    DRAUPNIR -.->|"the edge's image is pulled from here"| YGG
 ```
 
-The dotted edge is the only surprising one: the edge's own image comes from a registry that the edge fronts externally. That is not circular, and why is covered in [Bootstrapping yggdrasil](#bootstrapping-yggdrasil).
+The dotted edge is the only surprising one: the edge's own image comes from a registry running beside it. That is not circular, and why is covered in [Bootstrapping](#bootstrapping).
 
 ## Responsibilities
 
-| Does                                                     | Does not                                                                                    |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| declare how `yggdrasil` is run: mounts, port, privileges | build the image or hold its configuration, which is [kosmos.yggdrasil](../kosmos.yggdrasil) |
-| pin the exact image version deployed, with history       | decide what the image contains                                                              |
-| name the project and its network                         | appear in any DNS name, because it names a grouping                                         |
-| build a resolved compose file and copy it to Kosmos      | bring itself up at login, which `atlas` does                                                |
-| hold the only writable mount the edge has                | hold state of its own; there are no named volumes                                           |
+| Does                                                       | Does not                                                                                                                                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| declare how each service is run: mounts, ports, privileges | build either image or hold its configuration, which is [kosmos.yggdrasil](../kosmos.yggdrasil) and [kosmos.draupnir](../kosmos.draupnir) |
+| pin the exact image versions deployed, with history        | decide what the images contain                                                                                                           |
+| name the project, its network and the store it references  | appear in any DNS name, because it names a grouping                                                                                      |
+| build a resolved compose file and copy it to Kosmos        | bring itself up at login, which `atlas` does                                                                                             |
+| reference the registry's store as an external volume       | create that volume, or hold the credential it mounts with                                                                                |
 
 ## Layout
 
 ```
-compose.yaml              the source: one service, one network
+compose.yaml              the source: two services, one network, one external volume
 config/deployment.json    what varies, and the deployment record
 dist/compose.yaml         the built artifact, untracked, what Kosmos runs
 scripts/build-compose.mjs the build
@@ -89,7 +94,9 @@ It is tracked, and that is the point. `git log -p -- config/deployment.json` is 
 
 | Choice                                            | Reason                                                                                                                |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `pull_policy: missing`                            | makes first bootstrap and steady state the same file, with no first-run branch                                        |
+| `pull_policy: missing` on the edge                | makes first bootstrap and steady state the same file, with no first-run branch                                        |
+| `pull_policy: never` on the registry              | its image cannot be pulled from itself, so a pull could only fail; this makes an absent image say so at once          |
+| the registry's store declared `external`          | the volume carries an SMB credential, and `down -v` must not be able to destroy every image the platform has built    |
 | immutable git SHA tags, never `latest`            | rollback is one line, and it is what makes `pull_policy: missing` safe                                                |
 | configuration tracked, artifact not               | the pinned tag is the deployment record and wants history; the built file is derivable and would only add churn       |
 | published to `127.0.0.1` only                     | the listener trusts a PROXY header from any source, which is only safe if nothing off-host can open the connection    |
@@ -101,35 +108,36 @@ It is tracked, and that is the point. `git log -p -- config/deployment.json` is 
 | certificates mounted, never copied in             | a private key in an image is a private key in the registry and in every layer cache that pulled it                    |
 | runtime limits in Compose, not the Dockerfile     | a Dockerfile builds an image; cgroup limits belong to whoever runs it, so this is the only place they can be asserted |
 
-## Bootstrapping yggdrasil
+## Bootstrapping
 
-There is an apparent ordering problem. The edge runs an image from `draupnir`, `draupnir` is filled by `brokk`, and `brokk` is reached from outside through the edge. Each looks like it needs one of the others first.
+Every image this project runs comes from a registry this project hosts, which looks circular and is not. It resolves in three parts, and the order matters.
 
-It is resolved rather than engineered around, in two parts.
+**The registry's image never enters the registry.** `draupnir` runs a local tag, built on Kosmos from `kosmos.draupnir`, and `pull_policy: never` so that an absent image says exactly that instead of attempting a pull that could not succeed. That is what makes a cold start recoverable at all, and it has a useful side effect: nothing can move that tag except a build and a commit here, so upgrading the registry is always deliberate.
 
-**The first image is built by hand on Kosmos and pushed**, which is "The first push" in the [registry document](../kosmos.bootstrap/docs/kubernetes/applications/01_DockerRegistrySetup.md). That breaks the dependency on `brokk` existing.
+**The first edge image is built by hand on Kosmos and pushed**, which removes the dependency on `brokk` existing. See [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/04_GinnungagapSetup.md#bootstrapping-the-first-image).
 
-**The image is therefore already in the local image store**, because the build happened here and the build command already tags it with the registry prefix. So the very first `docker compose up` resolves the reference locally and never contacts `draupnir` at all. Once `brokk` is building instead, the same `pull_policy: missing` pulls it, because then it is genuinely absent.
+**That build leaves the image in the local store**, already tagged with the registry prefix, so the very first `docker compose up` resolves it locally and never contacts `draupnir`. Once `brokk` builds it instead, the same `pull_policy: missing` pulls it, because then it is genuinely absent. One file, both cases, no first-run branch and no registry credentials on the first run.
 
-That is why there is no bootstrap mode, no conditional, and no registry credentials needed on the first run.
+> **On a cold image store the order is not optional.** `docker compose up -d` resolves images for the whole project before creating any container, so a project-wide `up` with the edge's image absent tries to pull it while the registry is not running. Bring `draupnir` up first. That is also what `atlas` does.
 
-The in-cluster pull path is unaffected by any of this. `containerd` reaches `draupnir` directly across the private VM subnet, so the cluster keeps pulling images while the edge is down. That is what makes hosting the edge's own image in a registry the edge fronts safe rather than circular.
-
-> **The host reaches `draupnir` by name only because of an `/etc/hosts` entry.** The Docker Desktop daemon does not read the host's `/etc/resolver` files, so it never sees Orpheus and cannot resolve `kosmos.internal` on its own. The entry is made during setup and recorded in the registry document. Without it, `docker pull` fails with `lookup amalthea.hades.kosmos.internal ... no such host`, which names a symptom rather than the cause.
+> **The host reaches `draupnir` by name only because of an `/etc/hosts` entry.** The Docker Desktop daemon does not read the host's `/etc/resolver` files, so it never sees Orpheus and cannot resolve `kosmos.internal` on its own. Without it, `docker pull` fails with `lookup amalthea.hades.kosmos.internal ... no such host`, which names a symptom rather than the cause.
 
 ## Runtime prerequisites
 
 The container fails clearly rather than mysteriously when one of these is missing, but it does fail.
 
-| Requirement                                                                 | Why                                                                                                                                |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Docker Desktop running                                                      | there is no daemon otherwise, and it is a GUI application that has to be set to start at login                                     |
-| `/Users/typhon/certs/canunu.me/canunu.me.fullchain.pem` and its `.key`      | mounted as files. A missing source becomes a directory, and nginx then reports an unreadable certificate rather than an absent one |
-| `/Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt`                   | the authority that internal upstreams are verified against                                                                         |
-| `/Users/typhon/var/logs/kosmos/yggdrasil` exists and is writable by uid 101 | the entrypoint checks both and exits with an explanation. The most likely first run failure                                        |
-| `yggdrasil.image` set in `config/deployment.json`                           | the build refuses to produce an artifact, with an explanation, while it is empty                                                   |
-| the image present locally or pullable                                       | see [Bootstrapping yggdrasil](#bootstrapping-yggdrasil)                                                                            |
-| `hermes` running                                                            | not needed to start, but nothing reaches the edge without it, since 8443 is loopback only                                          |
+| Requirement                                                                             | Why                                                                                                                                |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Docker Desktop running                                                                  | there is no daemon otherwise, and it is a GUI application that has to be set to start at login                                     |
+| `/Users/typhon/certs/canunu.me/canunu.me.fullchain.pem` and its `.key`                  | mounted as files. A missing source becomes a directory, and nginx then reports an unreadable certificate rather than an absent one |
+| `/Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt`                               | the authority that internal upstreams are verified against                                                                         |
+| `/Users/typhon/var/logs/kosmos/yggdrasil` exists and is writable by uid 101             | the entrypoint checks both and exits with an explanation. The most likely first run failure                                        |
+| `yggdrasil.image` and `draupnir.image` set in `config/deployment.json`                  | the build refuses to produce an artifact, with an explanation, while either is empty                                               |
+| the images present locally or pullable                                                  | see [Bootstrapping](#bootstrapping)                                                                                                |
+| the `draupnir-volume` volume exists                                                     | it is external, and created by hand because it carries a credential. The registry will not start without it                        |
+| `/Users/typhon/certs/kosmos-local-ca/amalthea.hades.kosmos.internal.crt` and its `.key` | the registry terminates its own TLS; `hermes` passes the connection through without decrypting it                                  |
+| `/Users/typhon/ginnungagap/htpasswd`, bcrypt                                            | the registry rejects other formats at startup with an error that does not name the cause                                           |
+| `hermes` running                                                                        | not needed to start, but nothing reaches either service without it, since both publish to loopback only                            |
 
 ## Bringing it up
 

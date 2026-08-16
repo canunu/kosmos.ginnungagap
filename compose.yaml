@@ -28,6 +28,111 @@
 name: ginnungagap
 
 services:
+  # draupnir - the container registry. Holds every image the platform builds,
+  # including yggdrasil's, which is why it comes up first.
+  #
+  # The image is built and documented in kosmos.draupnir. This file is only
+  # concerned with how it is run: what is mounted into it, what is published out
+  # of it, and what it is allowed to do.
+  draupnir:
+    # A local tag, and deliberately never a reference into the registry that this
+    # container is. yggdrasil's image can be pulled once the registry is up; the
+    # registry's own image cannot be pulled from itself, so a reference such as
+    # amalthea.hades.kosmos.internal/draupnir:<sha> would make a cold start
+    # unrecoverable. Built on Kosmos with:
+    #
+    #   docker build -t draupnir:<git-sha> ../kosmos.draupnir
+    #
+    # The constraint has an upside worth keeping: nothing can move this tag except
+    # a build and an edit here, so upgrading the registry is always deliberate.
+    image: ${DRAUPNIR_IMAGE:?set draupnir.image in config/deployment.json, e.g. draupnir:<git-sha>}
+
+    # `never` rather than `missing`. The image is local by construction, so a pull
+    # could only ever fail, and failing immediately with "image not present" is a
+    # better error than an attempt to pull from a registry that is not running
+    # yet because this is it.
+    pull_policy: never
+
+    # on-failure, so the daemon recovers a crash but never performs an initial
+    # start. atlas is the sole start authority; see the note on yggdrasil's
+    # restart policy below, which explains it in full.
+    restart: on-failure
+
+    ports:
+      # Loopback only, and for a different reason than yggdrasil's. hermes routes
+      # this registry's name to it by SNI and applies the source rule that keeps
+      # it off the WAN. Publishing on 0.0.0.0 would put an unfiltered registry
+      # listener on the LAN, outside that rule entirely.
+      - "127.0.0.1:5000:5000"
+
+    volumes:
+      # The store, and the only stateful thing in this project.
+      #
+      # External, so its lifecycle is not the application's: it carries an SMB
+      # credential in its driver options, which must not live in a file this
+      # repository builds and copies to Kosmos, and `external` also means
+      # `docker compose down -v` cannot destroy every image the platform has
+      # built. Created by hand; see "The store" in
+      # kosmos.bootstrap/docs/bare_metal/04_GinnungagapSetup.md.
+      - draupnir-volume:/var/lib/registry
+
+      # The registry's own certificate and key, read only. It terminates its own
+      # TLS, because hermes passes the connection through without decrypting it,
+      # so this is the keypair clients actually validate.
+      - /Users/typhon/certs/kosmos-local-ca/amalthea.hades.kosmos.internal.crt:/etc/ssl/draupnir/tls.crt:ro
+      - /Users/typhon/certs/kosmos-local-ca/amalthea.hades.kosmos.internal.key:/etc/ssl/draupnir/tls.key:ro
+
+      # The htpasswd file, read only. bcrypt only: other formats are rejected at
+      # startup with an error that does not name the cause.
+      - /Users/typhon/ginnungagap/htpasswd:/etc/distribution/htpasswd:ro
+
+    environment:
+      # TLS and authentication are supplied here rather than baked into the image.
+      # A path baked in has to agree with a mount forever, and the credential is
+      # not the image's to hold - a key in an image is a key in every layer cache
+      # that pulled it. The image ships everything else it needs.
+      REGISTRY_HTTP_TLS_CERTIFICATE: /etc/ssl/draupnir/tls.crt
+      REGISTRY_HTTP_TLS_KEY: /etc/ssl/draupnir/tls.key
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: Kosmos Registry
+      REGISTRY_AUTH_HTPASSWD_PATH: /etc/distribution/htpasswd
+
+    # No capability is required. The listener is above 1024, and the container
+    # runs as root only because the base image does.
+    cap_drop:
+      - ALL
+
+    security_opt:
+      - no-new-privileges:true
+
+    # read_only is deliberately not set here, unlike on yggdrasil. Whether
+    # Distribution writes anywhere outside its storage root has not been checked
+    # against this image, and asserting it untested would trade a real property
+    # for a plausible one.
+
+    deploy:
+      resources:
+        limits:
+          cpus: ${DRAUPNIR_CPU_LIMIT:?set draupnir.cpuLimit in config/deployment.json}
+          memory: ${DRAUPNIR_MEMORY_LIMIT:?set draupnir.memoryLimit in config/deployment.json}
+
+    # No healthcheck. The base image defines none, curl is absent from it, and
+    # what a healthy registry answers depends on this configuration: /v2/ answers
+    # 401 with htpasswd enabled, which is the specification working rather than a
+    # fault. See "Not decided yet" in kosmos.draupnir/README.md.
+
+    logging:
+      # The registry logs to stdout, so unlike yggdrasil this is the whole of its
+      # log output rather than just a startup banner. info level, set in the
+      # image, keeps it to startup, errors and one line per request.
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+    networks:
+      - ginnungagap
+
   # yggdrasil - the application edge. Terminates public TLS for canunu.me,
   # serves the site, and maps each published name onto the same name in the
   # internal zone, hades.kosmos.internal.
@@ -251,6 +356,17 @@ services:
 
     networks:
       - ginnungagap
+
+volumes:
+  # The registry's store. Created by hand on Kosmos and never by this project,
+  # because its driver options carry the SMB credential for the share it mounts.
+  # Declaring it `external` keeps that secret out of every file this repository
+  # builds, and means `docker compose down -v` cannot remove the store.
+  #
+  # It is the only named volume here, and the only state in the project.
+  draupnir-volume:
+    external: true
+    name: draupnir-volume
 
 networks:
   # Named explicitly rather than left as Compose's generated

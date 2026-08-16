@@ -31,6 +31,11 @@ const composePath = join(repoRoot, "compose.yaml");
 // cover the configured value being absent.
 const PROBE_IMAGE = "probe.invalid/yggdrasil:0000000";
 
+// The registry's probe carries no registry prefix, because the real one cannot
+// either: its image is a local tag by construction. A probe shaped like the
+// edge's would pass a test the real value could never pass.
+const PROBE_REGISTRY_IMAGE = "draupnir:0000000";
+
 const CERT_MOUNTS = [
   "/etc/ssl/yggdrasil/canunu.me.fullchain.pem",
   "/etc/ssl/yggdrasil/canunu.me.key",
@@ -44,7 +49,13 @@ function composeConfig(overrides = {}) {
     JSON.parse(readFileSync(join(repoRoot, "config", "deployment.json"), "utf8"))
   );
 
-  const env = { ...process.env, ...base, YGGDRASIL_IMAGE: PROBE_IMAGE, ...overrides };
+  const env = {
+    ...process.env,
+    ...base,
+    YGGDRASIL_IMAGE: PROBE_IMAGE,
+    DRAUPNIR_IMAGE: PROBE_REGISTRY_IMAGE,
+    ...overrides
+  };
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete env[key];
   }
@@ -62,6 +73,7 @@ function composeConfig(overrides = {}) {
 
 let project;
 let service;
+let registry;
 
 before(() => {
   const result = composeConfig();
@@ -77,6 +89,7 @@ before(() => {
 
   project = JSON.parse(result.stdout);
   service = project.services.yggdrasil;
+  registry = project.services.draupnir;
 });
 
 describe("project identity", () => {
@@ -84,8 +97,8 @@ describe("project identity", () => {
     assert.equal(project.name, "ginnungagap");
   });
 
-  it("holds exactly one service, yggdrasil", () => {
-    assert.deepEqual(Object.keys(project.services), ["yggdrasil"]);
+  it("holds the registry and the edge, and nothing else", () => {
+    assert.deepEqual(Object.keys(project.services).sort(), ["draupnir", "yggdrasil"]);
   });
 
   it("names its network ginnungagap rather than leaving it as _default", () => {
@@ -106,11 +119,17 @@ describe("exposure", () => {
     assert.equal(String(service.ports[0].published), "8443");
   });
 
-  it("never publishes on a wildcard address", () => {
-    for (const port of service.ports) {
-      assert.ok(port.host_ip, `port ${port.target} has no host_ip, which binds all interfaces`);
-      assert.notEqual(port.host_ip, "0.0.0.0");
-      assert.notEqual(port.host_ip, "::");
+  it("never publishes on a wildcard address, in any service", () => {
+    // Across every service rather than the edge alone. The edge's reason is in
+    // the file header; the registry's is that hermes routes its name by SNI and
+    // applies the rule that keeps it off the WAN, so a port on 0.0.0.0 would be
+    // an unfiltered registry listener sitting outside that rule.
+    for (const [name, declared] of Object.entries(project.services)) {
+      for (const port of declared.ports ?? []) {
+        assert.ok(port.host_ip, `${name} publishes ${port.target} with no host_ip`);
+        assert.notEqual(port.host_ip, "0.0.0.0", `${name} publishes ${port.target} on a wildcard`);
+        assert.notEqual(port.host_ip, "::", `${name} publishes ${port.target} on a wildcard`);
+      }
     }
   });
 
@@ -128,6 +147,63 @@ describe("exposure", () => {
     for (const port of service.ports) {
       assert.notEqual(port.target, 80);
     }
+  });
+});
+
+describe("the registry", () => {
+  it("publishes only loopback 5000", () => {
+    assert.equal(registry.ports.length, 1);
+    assert.equal(registry.ports[0].host_ip, "127.0.0.1");
+    assert.equal(registry.ports[0].target, 5000);
+
+    // 5001 is Distribution's debug listener. It serves /metrics, and also
+    // /debug/pprof/ and /debug/vars, so it stays unpublished.
+    for (const port of registry.ports) assert.notEqual(port.target, 5001);
+  });
+
+  it("takes its image from the local store, never from itself", () => {
+    // The registry's own image cannot be pulled from the registry. A reference
+    // into amalthea would make a cold start unrecoverable, and `never` turns an
+    // absent image into an immediate, accurate error instead of a doomed pull.
+    assert.equal(registry.pull_policy, "never");
+    assert.doesNotMatch(registry.image, /amalthea/);
+    assert.doesNotMatch(registry.image, /\//, "the registry's image must be a local tag");
+  });
+
+  it("keeps its store in an external volume", () => {
+    // External because the volume carries the SMB credential in its driver
+    // options, and because `docker compose down -v` must not be able to destroy
+    // every image the platform has built.
+    assert.equal(project.volumes["draupnir-volume"].external, true);
+
+    const store = registry.volumes.find((v) => v.target === "/var/lib/registry");
+    assert.ok(store, "the registry has no store mounted");
+    assert.equal(store.type, "volume");
+    assert.equal(store.source, "draupnir-volume");
+  });
+
+  it("mounts its certificate, key and credential read only", () => {
+    for (const target of [
+      "/etc/ssl/draupnir/tls.crt",
+      "/etc/ssl/draupnir/tls.key",
+      "/etc/distribution/htpasswd"
+    ]) {
+      const mount = registry.volumes.find((v) => v.target === target);
+      assert.ok(mount, `${target} is not mounted`);
+      assert.equal(mount.read_only, true, `${target} is mounted writable`);
+    }
+  });
+});
+
+describe("secrets", () => {
+  it("carries no credential anywhere in the resolved project", () => {
+    // The store's credential lives in the volume's driver options, on the host,
+    // and the volume is external precisely so that it never reaches this file.
+    // This artifact is built on a development machine, committed to git history
+    // by way of config/deployment.json, and copied to Kosmos.
+    const rendered = JSON.stringify(project);
+    assert.doesNotMatch(rendered, /password=/i);
+    assert.doesNotMatch(rendered, /username=/i);
   });
 });
 

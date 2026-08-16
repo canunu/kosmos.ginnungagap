@@ -1,4 +1,9 @@
 {
+  "draupnir": {
+    "image": "",
+    "cpuLimit": "2",
+    "memoryLimit": "1g"
+  },
   "yggdrasil": {
     "image": "",
     "logRetentionDays": 30,
