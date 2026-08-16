@@ -11,8 +11,7 @@
   "comments": {
     "noDependencies": "There are no runtime dependencies and there never should be. Nothing here is built or shipped: compose.yaml is hand authored and is read directly by Docker Compose. Node is present only as this repository's tooling language, which is the same role it plays in kosmos.yggdrasil, a repository that also ships no JavaScript.",
     "testRunner": "The tests use node:test rather than a framework, so the suites run with nothing installed. Only the hooks, commitlint and prettier need node_modules.",
-    "deploy": "predeploy runs automatically before deploy, so a compose file that fails its own invariant tests cannot reach Kosmos. That gate is the reason this is an npm script rather than a shell script.",
-    "build": "The transform is `docker compose config`, not a templating library. Compose already interpolates, validates and emits canonical YAML, so there is no substitution code to get wrong. The cost is that the artifact has no comments, which is accepted: the artifact is not where the reasoning is read."
+    "deploy": "predeploy runs automatically before deploy, so a compose file that fails its own invariant tests cannot reach Kosmos. That gate is the reason this is an npm script rather than a shell script."
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

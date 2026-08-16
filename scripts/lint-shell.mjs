@@ -12,11 +12,6 @@
  * `sh -n` is always available and catches syntax errors. shellcheck catches the
  * things that actually matter, above all unquoted expansions.
  *
- * A missing shellcheck is a failure rather than a skip. It is a declared tool in
- * this repository's README, so its absence is a broken development environment
- * and not an optional extra, and a check that merely prints when it cannot run is
- * a check that quietly stops running.
- *
  * Everything is checked as POSIX sh rather than bash, because git runs hooks
  * with whatever shell it has, and assuming bash would be checking a shell that
  * never runs these.

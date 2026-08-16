@@ -6,14 +6,11 @@
  * knows what any particular setting means, so adding one is an edit to the JSON
  * and to compose.yaml, and not to this file.
  *
- * The alternative was keeping the values in a .env file, which Compose reads by
- * itself and which would need none of this. It was replaced because a .env can
- * only hold flat strings, and the configuration is expected to grow as more
- * services join the project. This shape has somewhere to put per-service
- * settings; a flat file does not.
+ * JSON rather than the .env file Compose reads by itself, which would need none
+ * of this: a .env holds only flat strings, and this shape has somewhere to put
+ * per-service settings as more services join the project.
  */
 
-/** Convert a camelCase config key to the SCREAMING_SNAKE_CASE half of a variable name. */
 export function screamingSnake(key) {
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")

@@ -1,11 +1,10 @@
 # ginnungagap - the Compose project that holds what runs directly in Docker
 # Desktop on Kosmos. Today that is yggdrasil, the application edge.
 #
-# The registry is deliberately not here. It sits below this project rather than
-# beside the edge: the cluster pulls from it too, and it has to be running before
-# anything here can start, which one project cannot express because Compose
-# resolves every image before it creates any container. It has a project of its
-# own in kosmos.draupnir.
+# The registry has a project of its own, in kosmos.draupnir. It sits below this
+# one rather than beside the edge: the cluster pulls from it too, and it must be
+# running before anything here starts, which one project cannot express because
+# Compose resolves every image before it creates any container.
 #
 # This is the source, not the artifact. `npm run build` resolves it against
 # config/deployment.json and writes dist/compose.yaml, and that is what is
@@ -24,8 +23,7 @@
 # editing a line needs in order not to break it.
 # ---------------------------------------------------------------------------
 #
-# There is no `version:` key. It has been ignored since Compose v2 and warns if
-# present.
+# No `version:` key: Compose v2 ignores it and warns when it is present.
 
 # Set explicitly rather than inferred from the directory name, so container and
 # network names survive the deployed directory being moved or renamed.
@@ -61,8 +59,7 @@ services:
     # start authority" in kosmos.bootstrap/docs/bare_metal/07_KosmosStartup.md.
     restart: on-failure
 
-    # container_name is deliberately unset, so Compose names it
-    # `ginnungagap-yggdrasil-1` and the project prefix stays visible in `docker ps`.
+    # No container_name, so the `ginnungagap-` prefix stays visible in `docker ps`.
 
     ports:
       # Loopback only, and a requirement rather than a preference: the listener
@@ -144,8 +141,8 @@ services:
     stop_signal: SIGQUIT
     stop_grace_period: 30s
 
-    # No healthcheck here. The image defines one against its own status listener,
-    # and restating it would create a second definition to keep in step.
+    # The image defines its own healthcheck against its status listener;
+    # restating it here would create a second definition to keep in step.
 
     logging:
       # nginx writes both streams to files on the log mount, so stdout carries
@@ -159,15 +156,14 @@ services:
 
     environment:
       # A policy knob, so changing it is a redeploy rather than a rebuild.
-      # YGGDRASIL_LOG_DIR is deliberately not configurable: it has to agree with
-      # the mount above, so it has one home and this is not it.
+      # YGGDRASIL_LOG_DIR is fixed by the log mount above and set in the image; a
+      # second copy here could disagree with it.
       YGGDRASIL_LOG_RETENTION_DAYS: ${YGGDRASIL_LOG_RETENTION_DAYS:?set yggdrasil.logRetentionDays in config/deployment.json}
 
     networks:
       - ginnungagap
 
 networks:
-  # Named explicitly rather than left as Compose's generated `ginnungagap_default`.
   # With one network the project and the network are the same boundary, and a
   # second name would imply they can diverge. A project that later needs more
   # names the additional ones descriptively, `ginnungagap-internal` and so on.

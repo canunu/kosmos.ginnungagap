@@ -18,9 +18,7 @@
  *   An unset variable fails here rather than on Kosmos. compose.yaml uses the
  *   `${VAR:?}` form, so a missing image is a build failure on a development
  *   machine instead of a container that will not start after a reboot.
- *
- * The output is not tracked. It is deterministic from two tracked inputs, so
- * committing it would add churn without adding information.
+
  */
 
 import { spawnSync } from "node:child_process";

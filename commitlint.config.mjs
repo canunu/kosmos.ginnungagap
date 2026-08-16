@@ -19,8 +19,8 @@ export default {
       2,
       "always",
       [
-        "compose", // compose.yaml: how services run
-        "config", // config/deployment.json: what is deployed
+        "compose",
+        "config",
         "build", // the build and its supporting library
         "tests",
         "lint",
