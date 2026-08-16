@@ -152,6 +152,11 @@ describe("exposure", () => {
 
 describe("the registry", () => {
   it("publishes only loopback 5000", () => {
+    // This matters more for the registry than for the edge. The registry is
+    // unauthenticated: what protects it is that only this host and the VM subnet
+    // can reach it, which hermes enforces by SNI and source address. A publish on
+    // any other address would put an open, writable registry on the LAN, and
+    // pushing to a registry means replacing what the platform runs.
     assert.equal(registry.ports.length, 1);
     assert.equal(registry.ports[0].host_ip, "127.0.0.1");
     assert.equal(registry.ports[0].target, 5000);
@@ -182,12 +187,8 @@ describe("the registry", () => {
     assert.equal(store.source, "draupnir-volume");
   });
 
-  it("mounts its certificate, key and credential read only", () => {
-    for (const target of [
-      "/etc/ssl/draupnir/tls.crt",
-      "/etc/ssl/draupnir/tls.key",
-      "/etc/distribution/htpasswd"
-    ]) {
+  it("mounts its certificate and key read only", () => {
+    for (const target of ["/etc/ssl/draupnir/tls.crt", "/etc/ssl/draupnir/tls.key"]) {
       const mount = registry.volumes.find((v) => v.target === target);
       assert.ok(mount, `${target} is not mounted`);
       assert.equal(mount.read_only, true, `${target} is mounted writable`);

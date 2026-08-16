@@ -82,20 +82,24 @@ services:
       - /Users/typhon/certs/kosmos-local-ca/amalthea.hades.kosmos.internal.crt:/etc/ssl/draupnir/tls.crt:ro
       - /Users/typhon/certs/kosmos-local-ca/amalthea.hades.kosmos.internal.key:/etc/ssl/draupnir/tls.key:ro
 
-      # The htpasswd file, read only. bcrypt only: other formats are rejected at
-      # startup with an error that does not name the cause.
-      - /Users/typhon/ginnungagap/htpasswd:/etc/distribution/htpasswd:ro
-
     environment:
-      # TLS and authentication are supplied here rather than baked into the image.
-      # A path baked in has to agree with a mount forever, and the credential is
-      # not the image's to hold - a key in an image is a key in every layer cache
-      # that pulled it. The image ships everything else it needs.
+      # TLS is supplied here rather than baked into the image: a path baked in has
+      # to agree with a mount forever, and a key in an image is a key in every
+      # layer cache that pulled it.
+      #
+      # There is deliberately no REGISTRY_AUTH. The registry is unauthenticated,
+      # and what protects it is that nothing can reach it: it publishes to
+      # loopback, and hermes admits its name only from this host and the VM
+      # subnet. htpasswd was the alternative and bought little - Distribution has
+      # no authorization model behind it, so any credential that can pull can also
+      # push, which is the property that actually matters for a supply chain.
+      # Real per-consumer access needs token auth and an authorization server to
+      # issue the tokens. Until that exists, the boundary is the network.
+      #
+      # TLS stays regardless, because containerd refuses plain HTTP registries
+      # without per-node configuration on every node.
       REGISTRY_HTTP_TLS_CERTIFICATE: /etc/ssl/draupnir/tls.crt
       REGISTRY_HTTP_TLS_KEY: /etc/ssl/draupnir/tls.key
-      REGISTRY_AUTH: htpasswd
-      REGISTRY_AUTH_HTPASSWD_REALM: Kosmos Registry
-      REGISTRY_AUTH_HTPASSWD_PATH: /etc/distribution/htpasswd
 
     # No capability is required. The listener is above 1024, and the container
     # runs as root only because the base image does.

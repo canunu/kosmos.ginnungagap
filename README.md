@@ -136,7 +136,7 @@ The container fails clearly rather than mysteriously when one of these is missin
 | the images present locally or pullable                                                  | see [Bootstrapping](#bootstrapping)                                                                                                |
 | the `draupnir-volume` volume exists                                                     | it is external, and created by hand because it carries a credential. The registry will not start without it                        |
 | `/Users/typhon/certs/kosmos-local-ca/amalthea.hades.kosmos.internal.crt` and its `.key` | the registry terminates its own TLS; `hermes` passes the connection through without decrypting it                                  |
-| `/Users/typhon/ginnungagap/htpasswd`, bcrypt                                            | the registry rejects other formats at startup with an error that does not name the cause                                           |
+| `hermes` configured to admit the registry's name from this host and the VM subnet only  | the registry is unauthenticated, so that rule is the whole of its access control                                                   |
 | `hermes` running                                                                        | not needed to start, but nothing reaches either service without it, since both publish to loopback only                            |
 
 ## Bringing it up
