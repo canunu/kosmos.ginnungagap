@@ -92,6 +92,8 @@ It is tracked, and that is the point. `git log -p -- config/deployment.json` is 
 
 ## The decisions worth knowing
 
+An index, not the arguments. Each line says what was chosen and enough to recognise why; the reasoning lives once, either in the comment beside the setting in `compose.yaml` or in the platform documentation those comments point at. If you find the same argument in two of those places, one of them is wrong and it is probably this one.
+
 | Choice                                            | Reason                                                                                                                |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `pull_policy: missing` on the edge                | makes first bootstrap and steady state the same file, with no first-run branch                                        |
@@ -110,17 +112,14 @@ It is tracked, and that is the point. `git log -p -- config/deployment.json` is 
 
 ## Bootstrapping
 
-Every image this project runs comes from a registry this project hosts, which looks circular and is not. It resolves in three parts, and the order matters.
+Every image this project runs comes from a registry this project hosts, which looks circular and is not. The sequence that resolves it — build the first edge image on Kosmos, push it, let the local store carry the first run — is a host procedure and lives in [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/04_GinnungagapSetup.md#bootstrapping-the-first-image).
 
-**The registry's image never enters the registry.** `draupnir` runs a local tag, built on Kosmos from `kosmos.draupnir`, and `pull_policy: never` so that an absent image says exactly that instead of attempting a pull that could not succeed. That is what makes a cold start recoverable at all, and it has a useful side effect: nothing can move that tag except a build and a commit here, so upgrading the registry is always deliberate.
+What this repository contributes to it is two settings, and they are the reason no first-run branch is needed anywhere:
 
-**The first edge image is built by hand on Kosmos and pushed**, which removes the dependency on `brokk` existing. See [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/04_GinnungagapSetup.md#bootstrapping-the-first-image).
+- **`draupnir` uses `pull_policy: never` and a local tag**, so the registry never depends on itself being up
+- **`yggdrasil` uses `pull_policy: missing`**, which resolves locally on the first run and pulls once `brokk` is building instead
 
-**That build leaves the image in the local store**, already tagged with the registry prefix, so the very first `docker compose up` resolves it locally and never contacts `draupnir`. Once `brokk` builds it instead, the same `pull_policy: missing` pulls it, because then it is genuinely absent. One file, both cases, no first-run branch and no registry credentials on the first run.
-
-> **On a cold image store the order is not optional.** `docker compose up -d` resolves images for the whole project before creating any container, so a project-wide `up` with the edge's image absent tries to pull it while the registry is not running. Bring `draupnir` up first. That is also what `atlas` does.
-
-> **The host reaches `draupnir` by name only because of an `/etc/hosts` entry.** The Docker Desktop daemon does not read the host's `/etc/resolver` files, so it never sees Orpheus and cannot resolve `kosmos.internal` on its own. Without it, `docker pull` fails with `lookup amalthea.hades.kosmos.internal ... no such host`, which names a symptom rather than the cause.
+> **On a cold image store the order is not optional.** `docker compose up -d` resolves images for the whole project before creating any container, so a project-wide `up` with the edge's image absent tries to pull it while the registry is not running. Bring `draupnir` up first, which is also what `atlas` does.
 
 ## Runtime prerequisites
 
