@@ -209,8 +209,23 @@ describe("deployment discipline", () => {
     assert.doesNotMatch(service.image, /:latest$/);
   });
 
-  it("restarts unless deliberately stopped", () => {
-    assert.equal(service.restart, "unless-stopped");
+  it("leaves the initial start to atlas, in every service", () => {
+    // atlas is the sole start authority for this project: it checks the resources a
+    // service depends on before the `up`, and readiness after it. `always` and
+    // `unless-stopped` both have the daemon start the container when the daemon
+    // starts, which on this host is every login, so a container could reach the
+    // network having been through neither check. Asserted across every service
+    // rather than yggdrasil alone, so a service added later inherits the rule
+    // instead of escaping it. See "What atlas is responsible for starting" in
+    // kosmos.bootstrap/docs/bare_metal/06_KosmosStartup.md.
+    for (const [name, declared] of Object.entries(project.services)) {
+      const policy = declared.restart;
+      assert.ok(policy, `${name} declares no restart policy`);
+      assert.ok(
+        policy.startsWith("on-failure"),
+        `${name} declares restart: ${policy}. Only on-failure leaves the first start to atlas`
+      );
+    }
   });
 
   it("stops nginx gracefully", () => {

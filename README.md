@@ -97,7 +97,7 @@ It is tracked, and that is the point. `git log -p -- config/deployment.json` is 
 | `tmpfs` on `/tmp`, in long form                   | the image relocates the pid file and all five temp paths there so the root can be read only, and the size matters     |
 | `stop_signal: SIGQUIT`                            | nginx's graceful shutdown. The default `SIGTERM` is its fast one and drops connections mid-deploy, which clients see  |
 | network named `ginnungagap`                       | with one network, the project and the network are the same boundary                                                   |
-| `restart: unless-stopped`                         | a Docker Desktop restart or a reboot recovers the edge without waiting for `atlas`                                    |
+| `restart: on-failure`                             | `atlas` is the sole start authority; a daemon-initiated start would bypass its resource and readiness checks          |
 | certificates mounted, never copied in             | a private key in an image is a private key in the registry and in every layer cache that pulled it                    |
 | runtime limits in Compose, not the Dockerfile     | a Dockerfile builds an image; cgroup limits belong to whoever runs it, so this is the only place they can be asserted |
 

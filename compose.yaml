@@ -60,10 +60,34 @@ services:
     # definition the same image the registry holds under that tag.
     pull_policy: missing
 
-    # `unless-stopped` rather than `always`, so a deliberate `docker compose stop`
-    # stays stopped while a Docker Desktop restart or a host reboot brings the
-    # edge back without waiting for atlas to run.
-    restart: unless-stopped
+    # `on-failure`, which is a decision about who may start this container
+    # rather than about how it recovers. atlas is the sole start authority for
+    # the project: it checks that the resources a service depends on are
+    # actually there, a mount, a certificate, a credential, before bringing it
+    # up, and checks readiness afterwards before reporting the platform ready.
+    #
+    # `always` and `unless-stopped` both have the daemon start the container
+    # when the daemon starts, which on this host is every login, since Docker
+    # Desktop has to be set to start at login. A container started that way has
+    # been through neither check, and the failure that follows is not
+    # necessarily visible: a bind mount whose source is absent becomes an empty
+    # directory rather than an error, as the volume comments below note, so the
+    # edge can come up healthy and wrong.
+    #
+    # `on-failure` gives up nothing in exchange. Docker's reference states it
+    # "doesn't restart the container if the daemon restarts", so a crash after
+    # atlas started it is still recovered while the daemon never performs an
+    # initial start. It is not a substitute for those checks either, since a
+    # policy "only takes effect after a container starts successfully", meaning
+    # up for at least ten seconds, so one that fails in two is never restarted
+    # at all.
+    # https://docs.docker.com/engine/containers/start-containers-automatically/
+    #
+    # Unbounded rather than `on-failure:3`: a bounded count gives up and leaves
+    # the edge down until atlas next runs, which means until the next login.
+    # See "What atlas is responsible for starting" in
+    # kosmos.bootstrap/docs/bare_metal/06_KosmosStartup.md.
+    restart: on-failure
 
     # container_name is deliberately unset. Letting Compose name it
     # `ginnungagap-yggdrasil-1` keeps the project prefix visible in `docker ps`,
