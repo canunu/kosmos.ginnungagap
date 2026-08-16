@@ -13,6 +13,19 @@
  *
  * A separate project name is used throughout so that running this can never
  * disturb a real ginnungagap on the same machine.
+ *
+ * **Only yggdrasil is created.** Compose still loads and interpolates the whole
+ * project, so the registry's variables have to be supplied below, but creating
+ * draupnir would require `draupnir-volume` to exist — an external volume, created
+ * by hand on the host, carrying a credential. A test suite has no business
+ * demanding that, and one that created a stand-in volume of the same name could
+ * shadow the real store.
+ *
+ * The gap that leaves is worth stating: the registry's daemon-applied settings,
+ * its capabilities, its published port and its limits, are asserted in the unit
+ * suite as resolved configuration and are not checked here against what Docker
+ * did with them. Its image and its behaviour against a real store are covered by
+ * the suites in kosmos.draupnir.
  */
 
 import { describe, it, before, after } from "node:test";
@@ -66,6 +79,11 @@ function compose(args, extraEnv = {}) {
         YGGDRASIL_LOG_RETENTION_DAYS: "30",
         YGGDRASIL_CPU_LIMIT: CPU_LIMIT,
         YGGDRASIL_MEMORY_LIMIT: MEMORY_LIMIT,
+        // Supplied because Compose interpolates every service before it creates
+        // any, not because draupnir is created here. See the file header.
+        DRAUPNIR_IMAGE: STAND_IN_IMAGE,
+        DRAUPNIR_CPU_LIMIT: CPU_LIMIT,
+        DRAUPNIR_MEMORY_LIMIT: MEMORY_LIMIT,
         ...extraEnv
       }
     }
@@ -155,7 +173,7 @@ let mounts;
 before(() => {
   if (!status.reachable) return;
 
-  const created = compose(["create", "--quiet-pull"]);
+  const created = compose(["create", "--quiet-pull", "yggdrasil"]);
   assert.equal(created.status, 0, `docker compose create failed:\n${created.stderr}`);
 
   const result = spawnSync("docker", ["inspect", CONTAINER], { encoding: "utf8" });
