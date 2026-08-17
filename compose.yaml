@@ -79,16 +79,13 @@ services:
       # Absolute paths rather than ${HOME}, so bringing the project up from the
       # wrong account fails loudly instead of mounting the wrong material.
       #
-      # Long form with `create_host_path: false` on every one, because the short
-      # form is what makes an absent certificate silent. Docker creates a
-      # directory in place of a missing source, nginx then reports a certificate
-      # it cannot read rather than one that is absent, and the directory has to be
-      # removed by hand before the file can be restored. With this the daemon
-      # refuses to create the container and names the path it could not find.
+      # File mounts, and `create_host_path: false` on each: a missing source stops
+      # the container with the path named. Without it Docker invents a directory
+      # there, nginx reports a certificate it cannot read, and the directory has to
+      # be removed by hand before the file can be restored.
       #
-      # atlas writes these at every login, from a keychain. The mount is live: if
-      # the source is removed while this is running, the file goes with it and the
-      # container cannot be restarted until it is back.
+      # atlas writes these at every login from a keychain, and the mount is live:
+      # remove a source and the file leaves the running container with it.
       - type: bind
         source: /Users/typhon/certs/canunu.me/canunu.me.fullchain.pem
         target: /etc/ssl/yggdrasil/canunu.me.fullchain.pem
@@ -111,11 +108,17 @@ services:
         bind:
           create_host_path: false
 
-      # The only writable bind mount. A per-component subdirectory rather than the
-      # session log directory itself, which also holds the session state atlas
-      # maintains and must not be writable by an Internet facing process. It must
-      # exist and be writable by uid 101; the entrypoint checks and explains.
-      - /Users/typhon/var/logs/kosmos/yggdrasil:/var/log/yggdrasil
+      # The only writable bind mount, and this component's own directory rather than
+      # the var/kosmos root: mounting the root would give an Internet facing process
+      # write access to every other component's files, including atlas's session
+      # state. atlas creates it at login, and a directory Docker invented instead
+      # would have a mode nobody chose. It must be writable by uid 101; the
+      # entrypoint checks and explains.
+      - type: bind
+        source: /Users/typhon/var/kosmos/yggdrasil
+        target: /var/log/yggdrasil
+        bind:
+          create_host_path: false
 
       # nginx needs a writable /tmp even with a read only root: the image
       # relocates its pid file and temp paths there precisely so the root can be

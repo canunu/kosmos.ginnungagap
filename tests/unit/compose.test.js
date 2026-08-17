@@ -194,11 +194,9 @@ describe("mounts", () => {
   });
 
   it("refuses to create a missing certificate source", () => {
-    // The short mount syntax is what makes an absent certificate silent: Docker
-    // creates a directory in its place, nginx reports a certificate it cannot read
-    // rather than one that is absent, and the directory has to be removed by hand
-    // before the file can be restored. This is the only thing standing between a
-    // reverted mount block and that failure mode returning unnoticed.
+    // Without this Docker invents a directory in place of a missing source and the
+    // container starts anyway, which nginx reports as a certificate it cannot read.
+    // This is what stops a reverted mount block restoring that quietly.
     for (const target of CERT_MOUNTS) {
       const mount = service.volumes.find((v) => v.target === target);
       assert.equal(
@@ -214,18 +212,27 @@ describe("mounts", () => {
     assert.notEqual(mount.read_only, true);
   });
 
-  it("never mounts the session log directory itself", () => {
-    // Widening this mount would hand an Internet facing process write access to
-    // the session state atlas maintains. See 02_Conventions.md, derived naming.
+  it("never mounts the shared component root itself", () => {
+    // Every component keeps its files under /Users/typhon/var/kosmos, including the
+    // session state atlas maintains. Widening this mount to the root would hand an
+    // Internet facing process write access to all of it. See Locations in
+    // kosmos.bootstrap/docs/03_Logging.md.
     for (const mount of service.volumes) {
       if (mount.type !== "bind") continue;
-      assert.notEqual(mount.source, "/Users/typhon/var/logs/kosmos");
-      assert.notEqual(mount.source, "/Users/typhon/var/logs");
+      assert.notEqual(mount.source, "/Users/typhon/var/kosmos");
+      assert.notEqual(mount.source, "/Users/typhon/var");
     }
   });
 
+  it("refuses to create a missing log directory", () => {
+    // atlas creates it at login. A directory Docker invents instead has a mode
+    // nobody chose, and the container starts anyway.
+    const mount = service.volumes.find((v) => v.target === LOG_MOUNT);
+    assert.equal(mount.bind?.create_host_path, false);
+  });
+
   it("only mounts from the two expected host roots", () => {
-    const allowed = ["/Users/typhon/certs/", "/Users/typhon/var/logs/kosmos/yggdrasil"];
+    const allowed = ["/Users/typhon/certs/", "/Users/typhon/var/kosmos/yggdrasil"];
     for (const mount of service.volumes) {
       if (mount.type !== "bind") continue;
       assert.ok(
