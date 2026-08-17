@@ -11,7 +11,7 @@ export default {
     // repository rather than being freeform, so that `git log --grep` is useful.
     //
     // `config` is separate from `compose` on purpose. A change to
-    // config/deployment.json is a deployment, and a change to compose.yaml is a
+    // config/deployment.json is a deployment, and a change to the compose template is a
     // change to how the service runs. Keeping the scopes apart is what makes
     // `git log --grep "(config)"` a readable deployment history, which is the
     // property the tracked configuration exists for.

@@ -4,7 +4,7 @@
  * The mapping is mechanical and deliberately dull: a service `yggdrasil` with a
  * key `logRetentionDays` becomes `YGGDRASIL_LOG_RETENTION_DAYS`. Nothing here
  * knows what any particular setting means, so adding one is an edit to the JSON
- * and to compose.yaml, and not to this file.
+ * and to compose.template.yaml, and not to this file.
  *
  * JSON rather than the .env file Compose reads by itself, which would need none
  * of this: a .env holds only flat strings, and this shape has somewhere to put
@@ -60,7 +60,7 @@ export function toComposeEnv(config) {
  * Remove YAML comments, so that a `${VAR}` written in prose is not mistaken for
  * one Compose will interpolate.
  *
- * This matters more than it sounds: compose.yaml explains its choices in
+ * This matters more than it sounds: the compose template explains its choices in
  * comments, and one of those comments mentions `${HOME}` in order to say why it
  * is not used. Compose interpolates the parsed model, by which point comments
  * are gone, so treating them as references reports a variable that can never

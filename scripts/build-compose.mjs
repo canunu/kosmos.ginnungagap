@@ -1,21 +1,22 @@
 #!/usr/bin/env node
 /*
- * Builds the deployable compose file from compose.yaml and config/deployment.json.
+ * Builds the deployable compose file from compose.template.yaml and
+ * config/deployment.json.
  *
  * The transform is `docker compose config` rather than a templating library, and
  * that is the whole point of the design. Compose already interpolates `${VAR}`,
  * validates the schema, and emits canonical YAML, so there is no substitution
  * code here to get wrong and no second definition of what a valid project is.
- * compose.yaml stays a valid compose file that can be run directly during
- * development.
+ * The template stays a valid compose file that can be run directly during
+ * development, with the variables supplied in the environment.
  *
  * Two consequences worth knowing:
  *
  *   The output has no comments. Compose reparses and reserialises the project,
- *   so the reasoning in compose.yaml does not survive into dist/. That is
+ *   so the reasoning in the template does not survive into dist/. That is
  *   accepted: the artifact is not where the reasoning is read.
  *
- *   An unset variable fails here rather than on Kosmos. compose.yaml uses the
+ *   An unset variable fails here rather than on Kosmos. The template uses the
  *   `${VAR:?}` form, so a missing image is a build failure on a development
  *   machine instead of a container that will not start after a reboot.
 
@@ -29,7 +30,7 @@ import { fileURLToPath } from "node:url";
 import { referencedVariables, toComposeEnv } from "./lib/deployment.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const composePath = join(repoRoot, "compose.yaml");
+const composePath = join(repoRoot, "compose.template.yaml");
 const configPath = join(repoRoot, "config", "deployment.json");
 const outDir = join(repoRoot, "dist");
 const outPath = join(outDir, "compose.yaml");
@@ -59,13 +60,15 @@ const configured = new Set(Object.keys(env));
 const unconfigured = [...referenced].filter((name) => !configured.has(name)).sort();
 if (unconfigured.length > 0) {
   fail(
-    `compose.yaml references variables that config/deployment.json does not set: ${unconfigured.join(", ")}`
+    `compose.template.yaml references variables that config/deployment.json does not set: ${unconfigured.join(", ")}`
   );
 }
 
 const unused = [...configured].filter((name) => !referenced.has(name)).sort();
 if (unused.length > 0) {
-  fail(`config/deployment.json sets values that compose.yaml never uses: ${unused.join(", ")}`);
+  fail(
+    `config/deployment.json sets values that compose.template.yaml never uses: ${unused.join(", ")}`
+  );
 }
 
 // --env-file /dev/null so a stray .env in the working directory cannot silently

@@ -3,6 +3,8 @@
     "image": "",
     "logRetentionDays": 30,
     "cpuLimit": "2",
-    "memoryLimit": "1g"
+    "memoryLimit": "1g",
+    "hostCertRoot": "/Users/typhon/certs",
+    "hostLogRoot": "/Users/typhon/var/kosmos/yggdrasil"
   }
 }

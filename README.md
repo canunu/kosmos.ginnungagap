@@ -45,8 +45,9 @@ The dotted edge is the only surprising one: the edge's own image comes from a re
 ## Layout
 
 ```
-compose.yaml              the source: one service, one network
+compose.template.yaml     the template: one service, one network
 config/deployment.json    what varies, and the deployment record
+tests/fixtures/           the deployment the suites resolve against
 dist/compose.yaml         the built artifact, untracked, what Kosmos runs
 scripts/build-compose.mjs the build
 scripts/lib/              the configuration to environment mapping
@@ -54,18 +55,20 @@ tests/unit/               the project's invariants; no daemon needed
 tests/docker/             what the daemon actually applied
 ```
 
-`compose.yaml` carries its reasoning inline rather than repeating it here, so that the reason for a setting sits next to the setting.
+`compose.template.yaml` carries its reasoning inline rather than repeating it here, so that the reason for a setting sits next to the setting.
 
 ## The build
 
-`compose.yaml` is the source, not the artifact. `npm run build` resolves it against `config/deployment.json` and writes `dist/compose.yaml`, and that resolved file is what is deployed and what Kosmos runs.
+`compose.template.yaml` is the template, not the artifact. `npm run build` resolves it against `config/deployment.json` and writes `dist/compose.yaml`, and that resolved file is what is deployed and what Kosmos runs.
 
-The transform is **`docker compose config` itself**, not a templating library. Compose already interpolates `${VAR}`, validates the schema, and emits canonical YAML, so there is no substitution code here to get wrong and no second opinion about what a valid project is. `compose.yaml` stays a valid compose file that can be run directly during development.
+**Nothing in the template names a path on Kosmos.** Every deployment-specific value is a placeholder: the image, the resource limits, and the two host roots the mounts hang off. That is what lets the test suites resolve the same template against directories they own, and it is why the file is named for what it is.
+
+The transform is **`docker compose config` itself**, not a templating library. Compose already interpolates `${VAR}`, validates the schema, and emits canonical YAML, so there is no substitution code here to get wrong and no second opinion about what a valid project is. The template stays a valid compose file that can be run directly during development, with the variables supplied in the environment.
 
 Two consequences, both accepted:
 
 - **The artifact has no comments.** Compose reparses and reserialises, so the reasoning does not survive into `dist/`. The artifact is not where it is read.
-- **An unset value fails on your machine, not on Kosmos.** `compose.yaml` uses the `${VAR:?}` form, so a missing image is a build failure during deploy rather than a container that will not start after a reboot.
+- **An unset value fails on your machine, not on Kosmos.** The template uses the `${VAR:?}` form, so a missing image is a build failure during deploy rather than a container that will not start after a reboot.
 
 `dist/` is not tracked. It is deterministic from two tracked inputs, so committing it would add churn without adding information.
 
@@ -79,18 +82,20 @@ Two consequences, both accepted:
     "image": "amalthea.hades.kosmos.internal:5000/yggdrasil:<git-sha>",
     "logRetentionDays": 30,
     "cpuLimit": "2",
-    "memoryLimit": "1g"
+    "memoryLimit": "1g",
+    "hostCertRoot": "/Users/typhon/certs",
+    "hostLogRoot": "/Users/typhon/var/kosmos/yggdrasil"
   }
 }
 ```
 
-Adding a setting is an edit here and in `compose.yaml`. The build fails if either is missing the other, in both directions: a variable the configuration does not set, and a setting the compose file never uses. The second is the quieter mistake and the one that leaves dead configuration behind.
+Adding a setting is an edit here and in `compose.template.yaml`. The build fails if either is missing the other, in both directions: a variable the configuration does not set, and a setting the compose file never uses. The second is the quieter mistake and the one that leaves dead configuration behind.
 
 It is tracked, and that is the point. `git log -p -- config/deployment.json` is the deployment history, and a rollback is the previous value.
 
 ## The decisions worth knowing
 
-An index, not the arguments. Each line says what was chosen and enough to recognise why; the reasoning lives once, either in the comment beside the setting in `compose.yaml` or in the platform documentation those comments point at. If you find the same argument in two of those places, one of them is wrong and it is probably this one.
+An index, not the arguments. Each line says what was chosen and enough to recognise why; the reasoning lives once, either in the comment beside the setting in `compose.template.yaml` or in the platform documentation those comments point at. If you find the same argument in two of those places, one of them is wrong and it is probably this one.
 
 | Choice                                            | Reason                                                                                                                |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -181,7 +186,7 @@ The public certificate rotates independently of all of this. Replacing the two f
 
 | Command               | Does                                                                        |
 | --------------------- | --------------------------------------------------------------------------- |
-| `npm run build`       | resolves `compose.yaml` into `dist/compose.yaml`                            |
+| `npm run build`       | resolves `compose.template.yaml` into `dist/compose.yaml`                   |
 | `npm test`            | the invariant suite. Needs the Docker CLI, not the daemon                   |
 | `npm run test:docker` | creates a container with a stand-in image and inspects it. Needs the daemon |
 | `npm run lint`        | shell and formatting                                                        |

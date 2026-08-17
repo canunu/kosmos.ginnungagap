@@ -6,10 +6,15 @@
 # running before anything here starts, which one project cannot express because
 # Compose resolves every image before it creates any container.
 #
-# This is the source, not the artifact. `npm run build` resolves it against
+# This is the template, not the artifact. `npm run build` resolves it against
 # config/deployment.json and writes dist/compose.yaml, and that is what is
 # deployed. It remains a valid compose file, so it can be run directly here
 # during development with the variables supplied in the environment.
+#
+# Every deployment-specific value is a `${VAR:?}` placeholder: the image, the
+# resource limits, and the two host roots the mounts hang off. Nothing in here
+# names a path on Kosmos, which is what lets the test suites resolve it against
+# directories they own.
 #
 # ---------------------------------------------------------------------------
 # What belongs in these comments, and what does not.
@@ -76,8 +81,14 @@ services:
       # Mounted rather than built into the image, so rotating them is not a
       # rebuild. The certificate must be the full chain, not the leaf alone.
       #
-      # Absolute paths rather than ${HOME}, so bringing the project up from the
+      # The root is configured and ${HOME} is not used, so the account is never
+      # inferred from whoever runs the project: the built artifact carries an
+      # absolute path from config/deployment.json, and bringing it up from the
       # wrong account fails loudly instead of mounting the wrong material.
+      #
+      # The filenames are literal because the targets are. Those are the image's
+      # contract, in kosmos.yggdrasil/conf/snippets, and the two have to
+      # correspond — which is only visible with them written side by side.
       #
       # File mounts, and `create_host_path: false` on each: a missing source stops
       # the container with the path named. Without it Docker invents a directory
@@ -87,13 +98,13 @@ services:
       # atlas writes these at every login from a keychain, and the mount is live:
       # remove a source and the file leaves the running container with it.
       - type: bind
-        source: /Users/typhon/certs/canunu.me/canunu.me.fullchain.pem
+        source: ${YGGDRASIL_HOST_CERT_ROOT:?}/canunu.me/canunu.me.fullchain.pem
         target: /etc/ssl/yggdrasil/canunu.me.fullchain.pem
         read_only: true
         bind:
           create_host_path: false
       - type: bind
-        source: /Users/typhon/certs/canunu.me/canunu.me.key
+        source: ${YGGDRASIL_HOST_CERT_ROOT:?}/canunu.me/canunu.me.key
         target: /etc/ssl/yggdrasil/canunu.me.key
         read_only: true
         bind:
@@ -102,20 +113,21 @@ services:
       # Not used to serve anything: it is what the edge verifies its internal
       # upstreams against.
       - type: bind
-        source: /Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt
+        source: ${YGGDRASIL_HOST_CERT_ROOT:?}/kosmos-local-ca/kosmos-local-ca.crt
         target: /etc/ssl/kosmos/kosmos-local-ca.crt
         read_only: true
         bind:
           create_host_path: false
 
       # The only writable bind mount, and this component's own directory rather than
-      # the var/kosmos root: mounting the root would give an Internet facing process
-      # write access to every other component's files, including atlas's session
-      # state. atlas creates it at login, and a directory Docker invented instead
-      # would have a mode nobody chose. It must be writable by uid 101; the
+      # the shared root above it: mounting that would give an Internet facing
+      # process write access to every other component's files, including atlas's
+      # session state. The unit suite asserts this root is never an ancestor of
+      # anything mounted. atlas creates it at login, and a directory Docker invented
+      # instead would have a mode nobody chose. It must be writable by uid 101; the
       # entrypoint checks and explains.
       - type: bind
-        source: /Users/typhon/var/kosmos/yggdrasil
+        source: ${YGGDRASIL_HOST_LOG_ROOT:?}
         target: /var/log/yggdrasil
         bind:
           create_host_path: false

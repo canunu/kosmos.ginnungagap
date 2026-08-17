@@ -18,15 +18,36 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { toComposeEnv } from "../../scripts/lib/deployment.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const composePath = join(repoRoot, "compose.yaml");
+const composePath = join(repoRoot, "compose.template.yaml");
 
 const PROJECT = "ginnungagap-test";
 const CONTAINER = `${PROJECT}-yggdrasil-1`;
-const STAND_IN_IMAGE = "alpine:3";
+
+/*
+ * The deployment this suite resolves the template against, and the names of what has
+ * to exist for it. Both come from the fixture rather than from config/deployment.json,
+ * so the suite tests the project rather than what Kosmos is configured with.
+ *
+ * The mounts declare `create_host_path: false`, so a source that does not exist stops
+ * `docker compose create` with the path named. That is the point of the setting and it
+ * means this suite has to provide the sources: three files and one directory, under a
+ * directory it creates and removes. A file for a file mount and a directory for a
+ * directory mount, because mounting one onto the other is a different failure.
+ *
+ * A mount added to the template and not to `seed` fails `create` naming the path,
+ * which is a louder guard than an assertion would be.
+ */
+const { seed: SEED, ...FIXTURE } = JSON.parse(
+  readFileSync(join(repoRoot, "tests", "fixtures", "deployment.json"), "utf8")
+);
 
 const CERT_TARGETS = [
   "/etc/ssl/yggdrasil/canunu.me.fullchain.pem",
@@ -36,24 +57,37 @@ const CERT_TARGETS = [
 const LOG_TARGET = "/var/log/yggdrasil";
 
 /*
- * The limits this suite asks for, and what the daemon should record for them.
+ * What the daemon should record for the limits the fixture asks for.
  *
- * Compose canonicalises both, so the expected values are not the values written
- * in the compose file: `cpus` becomes NanoCpus and `1g` becomes a byte count.
- * That translation is part of what is being asserted.
- *
- * These are the suite's own fixture rather than the values in
- * config/deployment.json, for the same reason the retention value below is.
- * The claim under test is that a limit is applied at all, not that production is
- * currently sized a particular way, and a test that read the deployment would
- * fail every time someone re-tuned it.
+ * Compose canonicalises both, so these are not the values written in the fixture:
+ * `cpus` becomes NanoCpus and `1g` becomes a byte count. That translation is part of
+ * what is being asserted, which is why they are computed here rather than read.
  */
-const CPU_LIMIT = "2";
-const MEMORY_LIMIT = "1g";
 const EXPECTED_NANO_CPUS = 2_000_000_000;
 const EXPECTED_MEMORY_BYTES = 1_073_741_824;
 
+/*
+ * The directory the seeded mount sources live under, created before the container and
+ * removed after it. `mkdtemp` rather than a fixed path so two runs cannot collide and
+ * so nothing outside it is ever written to.
+ */
+let hostRoot;
+
+/** Create every source the template mounts, as the kind of thing it mounts. */
+function seedMountSources(root) {
+  for (const relative of SEED.directories) {
+    mkdirSync(join(root, relative), { recursive: true });
+  }
+  for (const relative of SEED.files) {
+    const path = join(root, relative);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "");
+  }
+}
+
 function compose(args, extraEnv = {}) {
+  const configured = toComposeEnv(FIXTURE);
+
   return spawnSync(
     "docker",
     ["compose", "--env-file", "/dev/null", "-f", composePath, "-p", PROJECT, ...args],
@@ -62,10 +96,12 @@ function compose(args, extraEnv = {}) {
       encoding: "utf8",
       env: {
         ...process.env,
-        YGGDRASIL_IMAGE: STAND_IN_IMAGE,
-        YGGDRASIL_LOG_RETENTION_DAYS: "30",
-        YGGDRASIL_CPU_LIMIT: CPU_LIMIT,
-        YGGDRASIL_MEMORY_LIMIT: MEMORY_LIMIT,
+        ...configured,
+        // The fixture holds the roots as names. Absolute here, joined onto the
+        // directory this suite owns, because Compose resolves a relative host path
+        // against the project directory.
+        YGGDRASIL_HOST_CERT_ROOT: join(hostRoot, FIXTURE.yggdrasil.hostCertRoot),
+        YGGDRASIL_HOST_LOG_ROOT: join(hostRoot, FIXTURE.yggdrasil.hostLogRoot),
         ...extraEnv
       }
     }
@@ -155,6 +191,9 @@ let mounts;
 before(() => {
   if (!status.reachable) return;
 
+  hostRoot = mkdtempSync(join(tmpdir(), "ginnungagap-runtime-"));
+  seedMountSources(hostRoot);
+
   const created = compose(["create", "--quiet-pull"]);
   assert.equal(created.status, 0, `docker compose create failed:\n${created.stderr}`);
 
@@ -169,6 +208,7 @@ before(() => {
 after(() => {
   if (!status.reachable) return;
   compose(["down", "--remove-orphans"]);
+  if (hostRoot) rmSync(hostRoot, { recursive: true, force: true });
 });
 
 describe("what the daemon applied", { skip }, () => {

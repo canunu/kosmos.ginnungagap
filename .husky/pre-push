@@ -44,7 +44,7 @@ else
     echo "pre-push: WARNING - cannot reach the Docker daemon." >&2
     echo "pre-push: ${docker_error}" >&2
     echo "pre-push: the runtime suite did NOT run, so nothing checked that the" >&2
-    echo "pre-push: daemon applies what compose.yaml describes." >&2
+    echo "pre-push: daemon applies what compose.template.yaml describes." >&2
     echo "pre-push: fix the above and run 'npm run test:docker'." >&2
     echo "" >&2
 fi

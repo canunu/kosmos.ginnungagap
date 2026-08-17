@@ -1,7 +1,7 @@
 .DS_Store
 node_modules/
 
-# The built compose file. Deterministic from compose.yaml and
+# The built compose file. Deterministic from compose.template.yaml and
 # config/deployment.json, both of which are tracked, so committing it would add
 # churn without adding information. `npm run build` regenerates it.
 dist/

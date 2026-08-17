@@ -91,7 +91,7 @@ describe("referencedVariables", () => {
   });
 
   it("ignores a variable mentioned only in a comment", () => {
-    // compose.yaml explains why it does not use ${HOME}. Compose interpolates
+    // The compose template explains why it does not use ${HOME}. Compose interpolates
     // the parsed model, so a comment can never need a value.
     const source =
       "# Absolute paths rather than ${HOME}, because the account is fixed.\nimage: ${FOO}\n";

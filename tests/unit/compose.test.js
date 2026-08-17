@@ -24,12 +24,36 @@ import { fileURLToPath } from "node:url";
 import { toComposeEnv } from "../../scripts/lib/deployment.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const composePath = join(repoRoot, "compose.yaml");
+const composePath = join(repoRoot, "compose.template.yaml");
+const recordPath = join(repoRoot, "config", "deployment.json");
 
-// A stand-in rather than the configured value, so the suite tests the project's
-// shape and not whatever happens to be deployed today. The guard tests below
-// cover the configured value being absent.
+/*
+ * Stand-in values throughout, so the suite tests the project's shape rather than
+ * whatever Kosmos is configured with today. The image was already a stand-in for
+ * that reason and the host roots now join it, which is what makes the containment
+ * assertions below hold for any deployment instead of for one set of paths.
+ *
+ * What the committed record actually says is asserted separately, at the bottom,
+ * because nothing else would: every containment assertion is satisfied trivially by
+ * a root of `/`.
+ */
+const { seed: _seed, ...FIXTURE } = JSON.parse(
+  readFileSync(join(repoRoot, "tests", "fixtures", "deployment.json"), "utf8")
+);
+
 const PROBE_IMAGE = "probe.invalid/yggdrasil:0000000";
+
+/*
+ * The fixture holds the roots as names; each suite supplies the base. This one is
+ * never on the filesystem, so the base is fictional and only has to be absolute:
+ * Compose resolves a relative host path against the project directory, which would
+ * put every mount inside the checkout and make the containment assertions below
+ * compare a relative name against an absolute path. The runtime suite joins the same
+ * names onto a directory it creates instead.
+ */
+const PROBE_BASE = "/probe";
+const CERT_ROOT = join(PROBE_BASE, FIXTURE.yggdrasil.hostCertRoot);
+const LOG_ROOT = join(PROBE_BASE, FIXTURE.yggdrasil.hostLogRoot);
 
 const CERT_MOUNTS = [
   "/etc/ssl/yggdrasil/canunu.me.fullchain.pem",
@@ -40,11 +64,16 @@ const LOG_MOUNT = "/var/log/yggdrasil";
 
 /** Resolve the project the way the build does, with an overridable environment. */
 function composeConfig(overrides = {}) {
-  const base = toComposeEnv(
-    JSON.parse(readFileSync(join(repoRoot, "config", "deployment.json"), "utf8"))
-  );
+  const base = toComposeEnv(FIXTURE);
 
-  const env = { ...process.env, ...base, YGGDRASIL_IMAGE: PROBE_IMAGE, ...overrides };
+  const env = {
+    ...process.env,
+    ...base,
+    YGGDRASIL_IMAGE: PROBE_IMAGE,
+    YGGDRASIL_HOST_CERT_ROOT: CERT_ROOT,
+    YGGDRASIL_HOST_LOG_ROOT: LOG_ROOT,
+    ...overrides
+  };
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) delete env[key];
   }
@@ -212,15 +241,21 @@ describe("mounts", () => {
     assert.notEqual(mount.read_only, true);
   });
 
-  it("never mounts the shared component root itself", () => {
-    // Every component keeps its files under /Users/typhon/var/kosmos, including the
-    // session state atlas maintains. Widening this mount to the root would hand an
-    // Internet facing process write access to all of it. See Locations in
-    // kosmos.bootstrap/docs/03_Logging.md.
+  it("never mounts an ancestor of the log root", () => {
+    // Every component keeps its files under one shared root, including the session
+    // state atlas maintains, and the log root is this component's directory inside
+    // it. Widening the mount to a parent would hand an Internet facing process write
+    // access to all of it. See Locations in kosmos.bootstrap/docs/03_Logging.md.
+    //
+    // Implied by the whitelist below, and kept because it names the hazard: a
+    // failure here says the mount was widened rather than that a prefix did not
+    // match.
     for (const mount of service.volumes) {
       if (mount.type !== "bind") continue;
-      assert.notEqual(mount.source, "/Users/typhon/var/kosmos");
-      assert.notEqual(mount.source, "/Users/typhon/var");
+      assert.ok(
+        !LOG_ROOT.startsWith(`${mount.source}/`),
+        `${mount.source} is an ancestor of the log root ${LOG_ROOT}`
+      );
     }
   });
 
@@ -231,8 +266,8 @@ describe("mounts", () => {
     assert.equal(mount.bind?.create_host_path, false);
   });
 
-  it("only mounts from the two expected host roots", () => {
-    const allowed = ["/Users/typhon/certs/", "/Users/typhon/var/kosmos/yggdrasil"];
+  it("only mounts from the two configured host roots", () => {
+    const allowed = [`${CERT_ROOT}/`, LOG_ROOT];
     for (const mount of service.volumes) {
       if (mount.type !== "bind") continue;
       assert.ok(
@@ -294,5 +329,46 @@ describe("the unset image guard", () => {
   it("refuses to resolve when the retention setting is missing", () => {
     const result = composeConfig({ YGGDRASIL_LOG_RETENTION_DAYS: "" });
     assert.notEqual(result.status, 0);
+  });
+});
+
+describe("the committed deployment record", () => {
+  /*
+   * The suite above resolves the template against stand-in values, which is what
+   * makes its assertions hold for any deployment. The consequence is that nothing
+   * there looks at what Kosmos is actually configured with: a host root of `/` would
+   * satisfy every containment assertion trivially, because everything is inside it.
+   *
+   * So the record is checked on its own terms, here, and only for the properties that
+   * are wrong at any value rather than for the values themselves. Re-pathing a
+   * deployment must not fail these.
+   */
+  const record = JSON.parse(readFileSync(recordPath, "utf8")).yggdrasil;
+
+  for (const key of ["hostCertRoot", "hostLogRoot"]) {
+    it(`states ${key} as an absolute path`, () => {
+      // The built artifact is read by Docker on Kosmos with no shell and no working
+      // directory to be relative to, and the template deliberately does not use
+      // ${HOME}, so a relative value here would resolve against whatever ran the
+      // build rather than against the account that runs the container.
+      assert.ok(record[key].startsWith("/"), `${key} is ${record[key]}`);
+      assert.ok(!record[key].endsWith("/"), `${key} has a trailing slash: ${record[key]}`);
+    });
+  }
+
+  it("gives the log mount a directory of its own, not a shared root", () => {
+    // The mount is writable and reaches an Internet facing process. Its parent holds
+    // every other component's files, including the session state atlas maintains.
+    const parent = record.hostLogRoot.split("/").slice(0, -1).join("/");
+    assert.ok(parent.length > 1, `hostLogRoot has no parent to be inside: ${parent}`);
+    assert.notEqual(record.hostLogRoot, parent);
+  });
+
+  it("keeps the certificate material outside the writable mount", () => {
+    // Certificates are mounted read only and the log directory is not. Nesting one
+    // inside the other would put material the edge verifies against inside the only
+    // directory it can write to.
+    assert.ok(!record.hostCertRoot.startsWith(`${record.hostLogRoot}/`));
+    assert.ok(!record.hostLogRoot.startsWith(`${record.hostCertRoot}/`));
   });
 });

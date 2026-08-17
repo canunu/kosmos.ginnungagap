@@ -1,0 +1,18 @@
+{
+  "seed": {
+    "files": [
+      "certs/canunu.me/canunu.me.fullchain.pem",
+      "certs/canunu.me/canunu.me.key",
+      "certs/kosmos-local-ca/kosmos-local-ca.crt"
+    ],
+    "directories": ["var/kosmos/yggdrasil"]
+  },
+  "yggdrasil": {
+    "image": "alpine:3",
+    "logRetentionDays": 30,
+    "cpuLimit": "2",
+    "memoryLimit": "1g",
+    "hostCertRoot": "certs",
+    "hostLogRoot": "var/kosmos/yggdrasil"
+  }
+}

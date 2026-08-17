@@ -21,22 +21,23 @@ same machine is untouched.
 `npm run build` fails on an unset `yggdrasil.image`. That is the `${VAR:?}` guard
 working as designed. Distinguish it from a real failure when reporting.
 
-A variable set in `config/deployment.json` and unused in `compose.yaml`, or the
+A variable set in `config/deployment.json` and unused in `compose.template.yaml`, or the
 reverse, fails the build in both directions on purpose. It means a half-finished
 change, not a broken build.
 
 ## Edits that look harmless and are not
 
-**Comments in `compose.yaml` never reach Kosmos.** `docker compose config` reparses
+**Comments in `compose.template.yaml` never reach Kosmos.** `docker compose config` reparses
 and reserialises, so `dist/compose.yaml` carries none of them. That makes the
 comments here the only copy of their reasoning — there is no annotated artefact
 downstream to fall back on — and it means a comment edit cannot change what is
 deployed. Trim them for duplication or staleness, not for size.
 
-One comment is load bearing beyond its text: the mention of `${HOME}` in the
-certificate mount block is the only live justification for `stripComments` in
-`scripts/lib/deployment.mjs`, whose docstring cites it. Reword it and that
-docstring becomes false.
+Two comments are load bearing beyond their text: the `${HOME}` in the certificate
+mount block, and the `${VAR:?}` in the header. Both are what `stripComments` in
+`scripts/lib/deployment.mjs` exists for, and its docstring cites the first — without
+it the build reports `HOME` and `VAR` as variables the configuration does not set.
+Remove both and that docstring becomes false.
 
 **The loopback binding is a cross-repository invariant.** `kosmos.yggdrasil`'s
 nginx sets `set_real_ip_from 0.0.0.0/0` and trusts a PROXY protocol header from any
