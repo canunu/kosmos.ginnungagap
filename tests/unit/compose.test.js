@@ -193,6 +193,22 @@ describe("mounts", () => {
     }
   });
 
+  it("refuses to create a missing certificate source", () => {
+    // The short mount syntax is what makes an absent certificate silent: Docker
+    // creates a directory in its place, nginx reports a certificate it cannot read
+    // rather than one that is absent, and the directory has to be removed by hand
+    // before the file can be restored. This is the only thing standing between a
+    // reverted mount block and that failure mode returning unnoticed.
+    for (const target of CERT_MOUNTS) {
+      const mount = service.volumes.find((v) => v.target === target);
+      assert.equal(
+        mount.bind?.create_host_path,
+        false,
+        `${target} must not have its host path created for it`
+      );
+    }
+  });
+
   it("mounts the log directory writable", () => {
     const mount = service.volumes.find((v) => v.target === LOG_MOUNT);
     assert.notEqual(mount.read_only, true);

@@ -79,15 +79,37 @@ services:
       # Absolute paths rather than ${HOME}, so bringing the project up from the
       # wrong account fails loudly instead of mounting the wrong material.
       #
-      # These are file mounts and the files must exist first: Docker Desktop
-      # creates a directory in place of a missing source, and nginx then reports a
-      # certificate it cannot read rather than one that is absent.
-      - /Users/typhon/certs/canunu.me/canunu.me.fullchain.pem:/etc/ssl/yggdrasil/canunu.me.fullchain.pem:ro
-      - /Users/typhon/certs/canunu.me/canunu.me.key:/etc/ssl/yggdrasil/canunu.me.key:ro
+      # Long form with `create_host_path: false` on every one, because the short
+      # form is what makes an absent certificate silent. Docker creates a
+      # directory in place of a missing source, nginx then reports a certificate
+      # it cannot read rather than one that is absent, and the directory has to be
+      # removed by hand before the file can be restored. With this the daemon
+      # refuses to create the container and names the path it could not find.
+      #
+      # atlas writes these at every login, from a keychain. The mount is live: if
+      # the source is removed while this is running, the file goes with it and the
+      # container cannot be restarted until it is back.
+      - type: bind
+        source: /Users/typhon/certs/canunu.me/canunu.me.fullchain.pem
+        target: /etc/ssl/yggdrasil/canunu.me.fullchain.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /Users/typhon/certs/canunu.me/canunu.me.key
+        target: /etc/ssl/yggdrasil/canunu.me.key
+        read_only: true
+        bind:
+          create_host_path: false
 
       # Not used to serve anything: it is what the edge verifies its internal
       # upstreams against.
-      - /Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt:/etc/ssl/kosmos/kosmos-local-ca.crt:ro
+      - type: bind
+        source: /Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt
+        target: /etc/ssl/kosmos/kosmos-local-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
 
       # The only writable bind mount. A per-component subdirectory rather than the
       # session log directory itself, which also holds the session state atlas
