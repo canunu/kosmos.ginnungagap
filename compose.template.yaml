@@ -95,7 +95,8 @@ services:
       # there, nginx reports a certificate it cannot read, and the directory has to
       # be removed by hand before the file can be restored.
       #
-      # atlas writes these at every login from a keychain, and the mount is live:
+      # ouranos writes the certificate and key, in place, when it renews them; the
+      # authority's certificate is the file the CA setup leaves. The mount is live:
       # remove a source and the file leaves the running container with it.
       - type: bind
         source: ${YGGDRASIL_HOST_CERT_ROOT:?}/canunu.me/canunu.me.fullchain.pem

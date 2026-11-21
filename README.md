@@ -123,16 +123,16 @@ What this repository contributes is one setting: **`pull_policy: missing`**, whi
 
 The container fails clearly rather than mysteriously when one of these is missing, but it does fail.
 
-| Requirement                                                            | Why                                                                                                                                |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Docker Desktop running                                                 | there is no daemon otherwise, and it is a GUI application that has to be set to start at login                                     |
-| `/Users/typhon/certs/canunu.me/canunu.me.fullchain.pem` and its `.key` | mounted as files. A missing source becomes a directory, and nginx then reports an unreadable certificate rather than an absent one |
-| `/Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt`              | the authority that internal upstreams are verified against                                                                         |
-| `/Users/typhon/var/kosmos/yggdrasil` exists and is writable by uid 101 | the entrypoint checks both and exits with an explanation. The most likely first run failure                                        |
-| `yggdrasil.image` set in `config/deployment.json`                      | the build refuses to produce an artifact, with an explanation, while it is empty                                                   |
-| the images present locally or pullable                                 | see [Bootstrapping](#bootstrapping)                                                                                                |
-| the registry running, if the edge's image is not already local         | it is a separate project; `atlas` starts it first. See [kosmos.draupnir](../kosmos.draupnir)                                       |
-| `hermes` running                                                       | not needed to start, but nothing reaches the edge without it, since 8443 is loopback only                                          |
+| Requirement                                                            | Why                                                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Docker Desktop running                                                 | there is no daemon otherwise, and it is a GUI application that has to be set to start at login                     |
+| `/Users/typhon/certs/canunu.me/canunu.me.fullchain.pem` and its `.key` | mounted as files, each with `create_host_path: false`, so a missing source stops the container with the path named |
+| `/Users/typhon/certs/kosmos-local-ca/kosmos-local-ca.crt`              | the authority that internal upstreams are verified against                                                         |
+| `/Users/typhon/var/kosmos/yggdrasil` exists and is writable by uid 101 | the entrypoint checks both and exits with an explanation. The most likely first run failure                        |
+| `yggdrasil.image` set in `config/deployment.json`                      | the build refuses to produce an artifact, with an explanation, while it is empty                                   |
+| the images present locally or pullable                                 | see [Bootstrapping](#bootstrapping)                                                                                |
+| the registry running, if the edge's image is not already local         | it is a separate project; `atlas` starts it first. See [kosmos.draupnir](../kosmos.draupnir)                       |
+| `hermes` running                                                       | not needed to start, but nothing reaches the edge without it, since 8443 is loopback only                          |
 
 ## Bringing it up
 
@@ -161,7 +161,7 @@ Step 4 lints, runs the invariant suite, builds the artifact, and only then copie
 
 Compose recreates the container because the image reference changed, and does nothing if it did not. Rolling back is the same sequence with the previous value.
 
-The public certificate rotates independently of all of this. Replacing the two files on the host and restarting the container is the whole procedure: nothing is rebuilt and no image reference changes.
+The public certificate rotates independently of all of this: `ouranos` renews it and rewrites the two files in place, and the `atlas` heartbeat reloads nginx. Nothing is rebuilt, nothing restarts, and no image reference changes. See [Reloading the edge](../kosmos.bootstrap/docs/bare_metal/07_KosmosStartup.md#reloading-the-edge).
 
 ## Development
 
@@ -241,5 +241,5 @@ The PROXY protocol flag in step 2 is not optional. Once the listener requires th
 - how the image is built, configured or tested: [kosmos.yggdrasil](../kosmos.yggdrasil)
 - what the names mean and why: [Conventions](../kosmos.bootstrap/docs/02_Conventions.md)
 - installing Docker Desktop and Compose, the `/etc/hosts` entry, and the first push: the Kosmos setup documents in [kosmos.bootstrap](../kosmos.bootstrap)
-- bringing this up at login: `atlas`, in [kosmos.bootstrap](../kosmos.bootstrap)
+- bringing this up at login: `atlas`, in [kosmos.atlas](../kosmos.atlas), described in [Kosmos Startup](../kosmos.bootstrap/docs/bare_metal/07_KosmosStartup.md)
 - the host side of first bootstrap, including the directories this expects: [Ginnungagap Setup](../kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md)
