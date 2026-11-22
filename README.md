@@ -84,7 +84,8 @@ Two consequences, both accepted:
     "cpuLimit": "2",
     "memoryLimit": "1g",
     "hostCertRoot": "/Users/typhon/certs",
-    "hostLogRoot": "/Users/typhon/var/kosmos/yggdrasil"
+    "hostLogRoot": "/Users/typhon/var/kosmos/yggdrasil",
+    "hostStatusRoot": "/Users/typhon/var/kosmos/atlas/status"
   }
 }
 ```

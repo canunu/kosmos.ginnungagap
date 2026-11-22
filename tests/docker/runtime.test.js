@@ -55,6 +55,7 @@ const CERT_TARGETS = [
   "/etc/ssl/kosmos/kosmos-local-ca.crt"
 ];
 const LOG_TARGET = "/var/log/yggdrasil";
+const STATUS_TARGET = "/var/lib/yggdrasil/status";
 
 /*
  * What the daemon should record for the limits the fixture asks for.
@@ -102,6 +103,7 @@ function compose(args, extraEnv = {}) {
         // against the project directory.
         YGGDRASIL_HOST_CERT_ROOT: join(hostRoot, FIXTURE.yggdrasil.hostCertRoot),
         YGGDRASIL_HOST_LOG_ROOT: join(hostRoot, FIXTURE.yggdrasil.hostLogRoot),
+        YGGDRASIL_HOST_STATUS_ROOT: join(hostRoot, FIXTURE.yggdrasil.hostStatusRoot),
         ...extraEnv
       }
     }
@@ -260,9 +262,15 @@ describe("what the daemon applied", { skip }, () => {
     assert.equal(log.readOnly, false);
   });
 
+  it("mounted the status directory read only", () => {
+    const status = mounts.find((mount) => mount.destination === STATUS_TARGET);
+    assert.ok(status, `${STATUS_TARGET} is not mounted; mounts were ${JSON.stringify(mounts)}`);
+    assert.equal(status.readOnly, true);
+  });
+
   it("mounted nothing unexpected", () => {
     const destinations = mounts.map((mount) => mount.destination).sort();
-    assert.deepEqual(destinations, [...CERT_TARGETS, LOG_TARGET, "/tmp"].sort());
+    assert.deepEqual(destinations, [...CERT_TARGETS, LOG_TARGET, STATUS_TARGET, "/tmp"].sort());
   });
 
   it("is not privileged", () => {

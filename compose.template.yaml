@@ -134,6 +134,17 @@ services:
         bind:
           create_host_path: false
 
+      # The component status the page serves, which atlas's heartbeat writes. Read
+      # only, and atlas's own directory for it rather than anything wider, so the
+      # edge can read one file it did not write and nothing beside it. atlas creates
+      # it at login, before the project starts.
+      - type: bind
+        source: ${YGGDRASIL_HOST_STATUS_ROOT:?}
+        target: /var/lib/yggdrasil/status
+        read_only: true
+        bind:
+          create_host_path: false
+
       # nginx needs a writable /tmp even with a read only root: the image
       # relocates its pid file and temp paths there precisely so the root can be
       # read only.

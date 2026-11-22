@@ -54,6 +54,7 @@ const PROBE_IMAGE = "probe.invalid/yggdrasil:0000000";
 const PROBE_BASE = "/probe";
 const CERT_ROOT = join(PROBE_BASE, FIXTURE.yggdrasil.hostCertRoot);
 const LOG_ROOT = join(PROBE_BASE, FIXTURE.yggdrasil.hostLogRoot);
+const STATUS_ROOT = join(PROBE_BASE, FIXTURE.yggdrasil.hostStatusRoot);
 
 const CERT_MOUNTS = [
   "/etc/ssl/yggdrasil/canunu.me.fullchain.pem",
@@ -61,6 +62,7 @@ const CERT_MOUNTS = [
   "/etc/ssl/kosmos/kosmos-local-ca.crt"
 ];
 const LOG_MOUNT = "/var/log/yggdrasil";
+const STATUS_MOUNT = "/var/lib/yggdrasil/status";
 
 /** Resolve the project the way the build does, with an overridable environment. */
 function composeConfig(overrides = {}) {
@@ -72,6 +74,7 @@ function composeConfig(overrides = {}) {
     YGGDRASIL_IMAGE: PROBE_IMAGE,
     YGGDRASIL_HOST_CERT_ROOT: CERT_ROOT,
     YGGDRASIL_HOST_LOG_ROOT: LOG_ROOT,
+    YGGDRASIL_HOST_STATUS_ROOT: STATUS_ROOT,
     ...overrides
   };
   for (const [key, value] of Object.entries(env)) {
@@ -211,7 +214,16 @@ describe("hardening", () => {
 describe("mounts", () => {
   it("mounts exactly the expected targets", () => {
     const targets = service.volumes.map((v) => v.target).sort();
-    assert.deepEqual(targets, [...CERT_MOUNTS, LOG_MOUNT, "/tmp"].sort());
+    assert.deepEqual(targets, [...CERT_MOUNTS, LOG_MOUNT, STATUS_MOUNT, "/tmp"].sort());
+  });
+
+  it("mounts the status directory read only, and refuses to create it", () => {
+    // atlas writes the file; the edge only ever reads it.
+    const mount = service.volumes.find((v) => v.target === STATUS_MOUNT);
+    assert.ok(mount, `${STATUS_MOUNT} is not mounted`);
+    assert.equal(mount.read_only, true);
+    assert.equal(mount.bind?.create_host_path, false);
+    assert.equal(mount.source, STATUS_ROOT);
   });
 
   it("mounts every certificate read only", () => {
@@ -266,8 +278,8 @@ describe("mounts", () => {
     assert.equal(mount.bind?.create_host_path, false);
   });
 
-  it("only mounts from the two configured host roots", () => {
-    const allowed = [`${CERT_ROOT}/`, LOG_ROOT];
+  it("only mounts from the three configured host roots", () => {
+    const allowed = [`${CERT_ROOT}/`, LOG_ROOT, STATUS_ROOT];
     for (const mount of service.volumes) {
       if (mount.type !== "bind") continue;
       assert.ok(
@@ -345,7 +357,7 @@ describe("the committed deployment record", () => {
    */
   const record = JSON.parse(readFileSync(recordPath, "utf8")).yggdrasil;
 
-  for (const key of ["hostCertRoot", "hostLogRoot"]) {
+  for (const key of ["hostCertRoot", "hostLogRoot", "hostStatusRoot"]) {
     it(`states ${key} as an absolute path`, () => {
       // The built artifact is read by Docker on Kosmos with no shell and no working
       // directory to be relative to, and the template deliberately does not use

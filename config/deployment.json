@@ -1,10 +1,11 @@
 {
   "yggdrasil": {
-    "image": "amalthea.hades.kosmos.internal:5000/yggdrasil:bc6171056ad324a489eeaab17c477a794a5ed9af",
+    "image": "amalthea.hades.kosmos.internal:5000/yggdrasil:a9241ab7ffe6ac336f1b7b078c6e3d092d521d92",
     "logRetentionDays": 30,
     "cpuLimit": "2",
     "memoryLimit": "1g",
     "hostCertRoot": "/Users/typhon/certs",
-    "hostLogRoot": "/Users/typhon/var/kosmos/yggdrasil"
+    "hostLogRoot": "/Users/typhon/var/kosmos/yggdrasil",
+    "hostStatusRoot": "/Users/typhon/var/kosmos/atlas/status"
   }
 }
