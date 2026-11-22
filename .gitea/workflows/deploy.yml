@@ -1,0 +1,47 @@
+# Deploys the project to Kosmos when what it deploys changes: the image reference
+# in config/deployment.json, which is the approval to deploy, or the template.
+# The same checks npm run deploy makes from a development machine run first, and
+# a project that fails them is not deployed.
+#
+# Runs on talos, the forge's runner, as a host job: as typhon on Kosmos, so the
+# deployment is a copy into ~/ginnungagap rather than scp. Node comes from this
+# repository's mise.toml, which mise reads only once trusted.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - config/deployment.json
+      - compose.template.yaml
+
+jobs:
+  deploy:
+    runs-on: kosmos
+    steps:
+      - uses: builtin:checkout
+
+      - name: Node from mise.toml
+        run: |
+          mise trust --yes mise.toml
+          mise install
+
+      - name: Lint, test and build
+        run: |
+          mise exec -- npm ci --no-audit --no-fund
+          mise exec -- npm run predeploy
+
+      - name: Deploy
+        run: cp dist/compose.yaml /Users/typhon/ginnungagap/compose.yaml
+
+      - name: Bring up and wait for healthy
+        working-directory: /Users/typhon/ginnungagap
+        run: |
+          docker compose up -d
+          for i in $(seq 1 60); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' ginnungagap-yggdrasil-1)
+            [ "$status" = healthy ] && break
+            sleep 2
+          done
+          docker compose ps
+          [ "$status" = healthy ]
