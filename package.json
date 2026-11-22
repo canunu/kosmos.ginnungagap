@@ -31,6 +31,7 @@
     "test:docker": "node --test --test-concurrency=1 --test-timeout=300000 \"tests/docker/**/*.test.js\"",
     "predeploy": "npm run lint && npm test && npm run build",
     "deploy": "scp dist/compose.yaml typhon@kosmos.local:ginnungagap/compose.yaml",
+    "up": "ssh -o BatchMode=yes typhon@kosmos.local 'cd ginnungagap && /usr/local/bin/docker compose up -d && /usr/local/bin/docker compose ps'",
     "prepare": "husky"
   },
   "lint-staged": {

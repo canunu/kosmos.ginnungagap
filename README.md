@@ -136,7 +136,7 @@ The container fails clearly rather than mysteriously when one of these is missin
 
 ## Bringing it up
 
-On Kosmos, from the deployed directory:
+On Kosmos, from the deployed directory, or with `npm run up` from a development machine, which runs the first two over ssh:
 
 1. `cd ~/ginnungagap`
 2. `docker compose up -d`
@@ -151,11 +151,11 @@ The health status comes from the image's own check against its container-local s
 
 ## Deploying a new version
 
-1. Build and push the new image, or let `brokk` do it
+1. Build and push the new image: `npm run push:kosmos` in `kosmos.yggdrasil`, or let `brokk` do it
 2. Set the new reference in `config/deployment.json`
 3. Commit, so the deployment record moves with the change
 4. `npm run deploy`
-5. On Kosmos: `docker compose up -d`
+5. `npm run up`
 
 Step 4 lints, runs the invariant suite, builds the artifact, and only then copies it. A compose file that fails its own tests cannot reach Kosmos, which is the reason deploying is an npm script rather than a shell one.
 
@@ -192,6 +192,7 @@ The public certificate rotates independently of all of this: `ouranos` renews it
 | `npm run lint`        | shell and formatting                                                        |
 | `npm run format`      | applies formatting                                                          |
 | `npm run deploy`      | lint, test, build, then copy to Kosmos                                      |
+| `npm run up`          | `docker compose up -d` on Kosmos, over ssh                                  |
 
 ### What is tested, and where
 
