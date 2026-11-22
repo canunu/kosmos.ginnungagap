@@ -49,9 +49,10 @@ services:
     # container that will not start after a reboot.
     image: ${YGGDRASIL_IMAGE:?set yggdrasil.image in config/deployment.json, e.g. amalthea.hades.kosmos.internal:5000/yggdrasil:<git-sha>}
 
-    # `missing` is what makes first bootstrap need no special handling: the first
-    # image is built on Kosmos and is already local, and later, once brokk builds
-    # it instead, the same setting pulls it. Safe because tags are immutable. See
+    # `missing` is what makes first bootstrap need no special handling: the image
+    # is built on Kosmos's daemon, by hand at bootstrap and by the forge after, so
+    # it is usually local, and when it is not the same setting pulls it. Safe
+    # because tags are immutable. See
     # "Bootstrapping" in
     # kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md.
     pull_policy: missing
