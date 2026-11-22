@@ -19,7 +19,19 @@ jobs:
   deploy:
     runs-on: kosmos
     steps:
-      - uses: builtin:checkout
+      # The commit pushed, fetched from the forge with git. Not actions/checkout,
+      # which is a Node action that host mode would run with whatever node is on
+      # PATH, and which talos's PATH has none of; and not fetched from GitHub. The
+      # job's token reaches git through its environment, not its arguments.
+      - name: Check out
+        env:
+          JOB_TOKEN: ${{ gitea.token }}
+        run: |
+          auth=$(printf 'talos:%s' "$JOB_TOKEN" | base64)
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Basic $auth"
+          git init -q .
+          git fetch -q --depth 1 "${{ gitea.server_url }}/${{ gitea.repository }}.git" "${{ gitea.sha }}"
+          git checkout -q FETCH_HEAD
 
       - name: Node from mise.toml
         run: |
