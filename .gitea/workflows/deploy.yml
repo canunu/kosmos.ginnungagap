@@ -17,7 +17,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: kosmos
+    runs-on: talos
     steps:
       # The commit pushed, fetched from the forge with git. Not actions/checkout,
       # which is a Node action that host mode would run with whatever node is on
