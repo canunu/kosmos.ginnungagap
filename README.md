@@ -116,7 +116,7 @@ An index, not the arguments. Each line says what was chosen and enough to recogn
 
 The edge's image comes from a registry on the same host, which looks circular and is not. The sequence that resolves it — build the first image on Kosmos, push it, let the local store carry the first run — is a host procedure and lives in [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md#bootstrapping-the-first-image).
 
-What this repository contributes is one setting: **`pull_policy: missing`**. The image is built on Kosmos's own daemon, by hand at bootstrap and by the forge afterwards, so it is usually already in the local store; when it is not, the same setting pulls it from the registry. One file, both cases, no first-run branch.
+What this repository contributes is one setting: **`pull_policy: missing`**. The image is built on Kosmos's own daemon at bootstrap, so the first run finds it in the local store; afterwards the forge builds it in the cluster and pushes it to the registry, and the same setting pulls it from there. One file, both cases, no first-run branch.
 
 > **The registry has to be up first**, because on a cold image store `docker compose up -d` will try to pull the edge's image. It is a separate project precisely so that ordering is something `atlas` sequences rather than something this file has to caution about.
 
@@ -152,9 +152,9 @@ The health status comes from the image's own check against its container-local s
 
 ## Deploying a new version
 
-1. Push to `main` in `kosmos.yggdrasil`. The forge's `publish` workflow builds the image on Kosmos, tagged with the commit, and pushes it to the registry
+1. Push to `main` in `kosmos.yggdrasil`. The forge's `publish` workflow checks the repository on `sindri`, then builds the image on `surtr`, tagged with the commit, and pushes it to the registry
 2. Set the new reference in `config/deployment.json`
-3. Commit and push to `main`. The forge's `deploy` workflow, `.gitea/workflows/deploy.yml`, makes the checks `npm run deploy` makes, copies the built `compose.yaml` to `~/ginnungagap`, brings the project up and waits for it to be healthy
+3. Commit and push to `main`. The forge's `deploy` workflow, `.gitea/workflows/deploy.yml`, makes the checks `npm run deploy` makes and builds `compose.yaml` on `sindri`; then, on `talos`, it confirms the built file's sha256, copies it to `~/ginnungagap`, brings the project up and waits for it to be healthy
 
 The commit in step 3 is the approval to deploy, and the deployment record moves with it. A compose file that fails its own tests cannot reach Kosmos either way.
 

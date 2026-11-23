@@ -1,11 +1,13 @@
 # Deploys the project to Kosmos when what it deploys changes: the image reference
 # in config/deployment.json, which is the approval to deploy, or the template.
-# The same checks npm run deploy makes from a development machine run first, and
-# a project that fails them is not deployed.
 #
-# Runs on talos, the forge's runner, as a host job: as typhon on Kosmos, so the
-# deployment is a copy into ~/ginnungagap rather than scp. Node comes from this
-# repository's mise.toml, which mise reads only once trusted.
+# Two jobs, split by what each needs. The checks npm run deploy makes from a
+# development machine install packages from npm and run their code, so they run
+# on sindri, in a pod of their own in svartalfheim, and render dist/compose.yaml
+# there. The deploy needs the host, so it runs on talos as typhon, once the checks
+# pass: it takes the rendered file from the checks' outputs, confirms its sha256,
+# and copies it into ~/ginnungagap. It checks nothing out and installs and runs
+# nothing of the repository's.
 name: deploy
 
 on:
@@ -16,35 +18,47 @@ on:
       - compose.template.yaml
 
 jobs:
-  deploy:
-    runs-on: talos
+  checks:
+    runs-on: sindri
+    outputs:
+      compose: ${{ steps.render.outputs.compose }}
+      sha256: ${{ steps.render.outputs.sha256 }}
     steps:
-      # The commit pushed, fetched from the forge with git. Not actions/checkout,
-      # which is a Node action that host mode would run with whatever node is on
-      # PATH, and which talos's PATH has none of; and not fetched from GitHub. The
-      # job's token reaches git through its environment, not its arguments.
+      # The commit pushed, fetched from the forge with git. The job's token reaches
+      # git through its environment, not its arguments.
       - name: Check out
         env:
           JOB_TOKEN: ${{ gitea.token }}
         run: |
-          auth=$(printf 'talos:%s' "$JOB_TOKEN" | base64)
+          auth=$(printf 'sindri:%s' "$JOB_TOKEN" | base64 -w0)
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Basic $auth"
           git init -q .
           git fetch -q --depth 1 "${{ gitea.server_url }}/${{ gitea.repository }}.git" "${{ gitea.sha }}"
           git checkout -q FETCH_HEAD
 
-      - name: Node from mise.toml
-        run: |
-          mise trust --yes mise.toml
-          mise install
-
       - name: Lint, test and build
         run: |
-          mise exec -- npm ci --no-audit --no-fund
-          mise exec -- npm run predeploy
+          npm ci --no-audit --no-fund
+          npm run predeploy
 
+      - name: Hand the project to the deploy
+        id: render
+        run: |
+          echo "compose=$(base64 -w0 dist/compose.yaml)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum dist/compose.yaml | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: checks
+    runs-on: talos
+    steps:
       - name: Deploy
-        run: cp dist/compose.yaml /Users/typhon/ginnungagap/compose.yaml
+        env:
+          COMPOSE: ${{ needs.checks.outputs.compose }}
+          SHA256: ${{ needs.checks.outputs.sha256 }}
+        run: |
+          printf '%s' "$COMPOSE" | base64 -d > compose.yaml
+          echo "$SHA256  compose.yaml" | shasum -a 256 -c
+          cp compose.yaml /Users/typhon/ginnungagap/compose.yaml
 
       - name: Bring up and wait for healthy
         working-directory: /Users/typhon/ginnungagap
