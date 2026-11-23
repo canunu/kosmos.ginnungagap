@@ -1,6 +1,6 @@
 {
   "yggdrasil": {
-    "image": "amalthea.hades.kosmos.internal:5000/yggdrasil:9391d93f2c4e97580ac26b21e60f5f807c0f3377",
+    "image": "amalthea.hades.kosmos.internal:5000/yggdrasil:2f811505cacaffc12cb0aee7c0c4052ecf1cb571",
     "logRetentionDays": 30,
     "cpuLimit": "2",
     "memoryLimit": "1g",
