@@ -1,0 +1,55 @@
+# Every check this repository has, on a pull request into main, which is how
+# anything reaches main. A pull request cannot be merged until these pass.
+#
+# The unit job is what npm run deploy and the deploy workflow run first: lint, the
+# unit suite and the build. The docker suite runs only here and by hand: it needs
+# a Docker daemon, which fenrir gives each job inside its own pod on
+# kubedocker01, and it creates the project against a real daemon. Deploying is
+# deploy.yml's, on the merge, when the deployment record or template changes.
+name: checks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit:
+    runs-on: sindri
+    steps:
+      # The pull request's head, fetched from the forge with git. The job's token
+      # reaches git through its environment, not its arguments.
+      - name: Check out
+        env:
+          JOB_TOKEN: ${{ gitea.token }}
+        run: |
+          auth=$(printf 'sindri:%s' "$JOB_TOKEN" | base64 -w0)
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Basic $auth"
+          git init -q .
+          git fetch -q --depth 1 "${{ gitea.server_url }}/${{ gitea.repository }}.git" "${{ gitea.sha }}"
+          git checkout -q FETCH_HEAD
+
+      - name: Lint and unit suite
+        run: |
+          npm ci --no-audit --no-fund
+          npm run predeploy
+
+  docker:
+    runs-on: fenrir
+    steps:
+      - name: Check out
+        env:
+          JOB_TOKEN: ${{ gitea.token }}
+        run: |
+          auth=$(printf 'fenrir:%s' "$JOB_TOKEN" | base64 | tr -d '\n')
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Basic $auth"
+          git init -q .
+          git fetch -q --depth 1 "${{ gitea.server_url }}/${{ gitea.repository }}.git" "${{ gitea.sha }}"
+          git checkout -q FETCH_HEAD
+
+      - name: Start the job's Docker daemon
+        run: docker-up
+
+      - name: Docker suite
+        run: |
+          npm ci --no-audit --no-fund
+          npm run test:docker

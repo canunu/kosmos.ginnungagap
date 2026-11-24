@@ -209,13 +209,13 @@ It deliberately does not build or exercise the `yggdrasil` image. That is covere
 
 - `commit-msg`: conventional commit validation, scopes in `commitlint.config.mjs`
 - `pre-commit`: lint-staged
-- `pre-push`: the unit suite, then the docker suite
+- `pre-push`: lint, then the unit suite
 
 Tests run on push rather than on commit. A series of commits then costs one test run instead of one each, and the commit hook stays quick enough that nobody reaches for `--no-verify` to get past it.
 
 Push is also the only gate that sees everything going out. A push can carry commits made with `--no-verify`, rebased in from elsewhere, or written on a machine where the hooks were never installed, so nothing earlier is a guarantee about what is actually being pushed.
 
-The docker suite runs only on push, and **it does not block one when the daemon is unreachable**. That is an environment condition rather than a defect, and failing on it would teach the habit of `--no-verify`, which also switches off the commit message hook — a worse outcome than an unverified runtime suite. It warns loudly instead, because the alternative to a noisy skip is a silent one.
+**The docker suite runs on every pull request into `main`, and by hand**, not in a hook. `.gitea/workflows/checks.yml` runs `npm run predeploy`, the checks a deploy makes, on `sindri`, and the docker suite on `fenrir`, which gives each job a Docker daemon of its own; a pull request merges once both pass.
 
 ### Nothing else is advisory
 

@@ -1,4 +1,4 @@
-# Both suites, before anything leaves the machine.
+# Lint and the unit suite, before anything leaves the machine.
 #
 # Tests run here rather than on pre-commit for two reasons. A series of commits
 # costs one test run instead of one each, and the commit hook stays fast enough
@@ -21,30 +21,9 @@ if [ -z "$node_major" ] || [ "$node_major" -lt 20 ]; then
     exit 1
 fi
 
+npm run lint
 npm test
 
-# The daemon being down is an environment condition rather than a defect, so it
-# does not block the push. Blocking on it would teach the habit of --no-verify,
-# and that switch also disables the commit message hook, which is a worse outcome
-# than an unverified runtime suite.
-#
-# It must not skip quietly, though. The runtime suite is the only thing checking
-# that the daemon applies what Compose describes, so a silent skip would be false
-# confidence rather than a saved minute.
-if docker info >/dev/null 2>&1; then
-    npm run test:docker
-else
-    # Report why rather than assuming. A failed `docker info` covers a stopped
-    # daemon and a socket the current user cannot open, and saying "not running"
-    # for the second sends you to look at Docker Desktop instead of at
-    # permissions.
-    docker_error="$(docker info 2>&1 >/dev/null | tail -1)"
-
-    echo "" >&2
-    echo "pre-push: WARNING - cannot reach the Docker daemon." >&2
-    echo "pre-push: ${docker_error}" >&2
-    echo "pre-push: the runtime suite did NOT run, so nothing checked that the" >&2
-    echo "pre-push: daemon applies what compose.template.yaml describes." >&2
-    echo "pre-push: fix the above and run 'npm run test:docker'." >&2
-    echo "" >&2
-fi
+# The docker suite does not run here. It needs a Docker daemon, takes minutes, and
+# runs on every pull request into main, on fenrir, which is where it gates what
+# merges. Run it by hand with `npm run test:docker` when a change needs it.
