@@ -79,7 +79,7 @@ Two consequences, both accepted:
 ```json
 {
   "yggdrasil": {
-    "image": "amalthea.hades.kosmos.internal:5000/yggdrasil:<git-sha>",
+    "image": "oci.amalthea.hades.kosmos.internal:5000/yggdrasil:<git-sha>",
     "logRetentionDays": 30,
     "cpuLimit": "2",
     "memoryLimit": "1g",
@@ -114,7 +114,7 @@ An index, not the arguments. Each line says what was chosen and enough to recogn
 
 ## Bootstrapping
 
-The edge's image comes from a registry on the same host, which looks circular and is not. The sequence that resolves it — build the first image on Kosmos, push it, let the local store carry the first run — is a host procedure and lives in [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md#bootstrapping-the-first-image).
+The edge's image comes from a registry on the same host, which looks circular and is not. The sequence that resolves it — build the first image on Kosmos, push it, let the local store carry the first run — is a host procedure and lives in [Bootstrapping](../kosmos.bootstrap/docs/bare_metal/06_GinnungagapSetup.md#bootstrapping-the-first-image).
 
 What this repository contributes is one setting: **`pull_policy: missing`**. The image is built on Kosmos's own daemon at bootstrap, so the first run finds it in the local store; afterwards the forge builds it in the cluster and pushes it to the registry, and the same setting pulls it from there. One file, both cases, no first-run branch.
 
@@ -162,7 +162,7 @@ When the forge cannot, the same is done by hand: `npm run push:kosmos` in `kosmo
 
 Compose recreates the container because the image reference changed, and does nothing if it did not. Rolling back is the same sequence with the previous value.
 
-The public certificate rotates independently of all of this: `ouranos` renews it and rewrites the two files in place, and the `atlas` heartbeat reloads nginx. Nothing is rebuilt, nothing restarts, and no image reference changes. See [Reloading the edge](../kosmos.bootstrap/docs/bare_metal/07_KosmosStartup.md#reloading-the-edge).
+The public certificate rotates independently of all of this: `ouranos` renews it and rewrites the two files in place, and the `atlas` heartbeat reloads nginx. Nothing is rebuilt, nothing restarts, and no image reference changes. See [Reloading the edge](../kosmos.bootstrap/docs/bare_metal/08_KosmosStartup.md#reloading-the-edge).
 
 ## Development
 
@@ -243,5 +243,5 @@ The PROXY protocol flag in step 2 is not optional. Once the listener requires th
 - how the image is built, configured or tested: [kosmos.yggdrasil](../kosmos.yggdrasil)
 - what the names mean and why: [Conventions](../kosmos.bootstrap/docs/02_Conventions.md)
 - installing Docker Desktop and Compose, the `/etc/hosts` entry, and the first push: the Kosmos setup documents in [kosmos.bootstrap](../kosmos.bootstrap)
-- bringing this up at login: `atlas`, in [kosmos.atlas](../kosmos.atlas), described in [Kosmos Startup](../kosmos.bootstrap/docs/bare_metal/07_KosmosStartup.md)
-- the host side of first bootstrap, including the directories this expects: [Ginnungagap Setup](../kosmos.bootstrap/docs/bare_metal/05_GinnungagapSetup.md)
+- bringing this up at login: `atlas`, in [kosmos.atlas](../kosmos.atlas), described in [Kosmos Startup](../kosmos.bootstrap/docs/bare_metal/08_KosmosStartup.md)
+- the host side of first bootstrap, including the directories this expects: [Ginnungagap Setup](../kosmos.bootstrap/docs/bare_metal/06_GinnungagapSetup.md)

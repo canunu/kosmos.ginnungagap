@@ -49,6 +49,12 @@ const { seed: SEED, ...FIXTURE } = JSON.parse(
   readFileSync(join(repoRoot, "tests", "fixtures", "deployment.json"), "utf8")
 );
 
+// The stand-in image, from draupnir's mirror. On a machine on the LAN,
+// KOSMOS_REGISTRY names the registry as that machine reaches it,
+// oci.canunu.me.
+const REGISTRY = process.env.KOSMOS_REGISTRY ?? "oci.amalthea.hades.kosmos.internal:5000";
+FIXTURE.yggdrasil.image = `${REGISTRY}/mirror/docker.io/library/${FIXTURE.yggdrasil.image}`;
+
 const CERT_TARGETS = [
   "/etc/ssl/yggdrasil/canunu.me.fullchain.pem",
   "/etc/ssl/yggdrasil/canunu.me.key",
